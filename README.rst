@@ -14,7 +14,7 @@ Things to do after downloading nginx::
 
     # dynamic module
     > ./configure --add-dynamic-module=/path/to/nginx-ts-module
- 
+
 
 Example
 =======

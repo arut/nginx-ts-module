@@ -232,7 +232,7 @@ ngx_ts_read_packet(ngx_ts_stream_t *ts, ngx_buf_t *b)
 static ssize_t
 ngx_ts_read_header(ngx_ts_stream_t *ts, u_char *p, ngx_ts_header_t *h)
 {
-    /* 
+    /*
      * TS Packet Header
      * ISO/IEC 13818-1 : 2000 (E)
      * 2.4.3.2 Transport Stream packet layer, p. 18
@@ -314,7 +314,7 @@ ngx_ts_read_header(ngx_ts_stream_t *ts, u_char *p, ngx_ts_header_t *h)
 static ngx_int_t
 ngx_ts_read_pat(ngx_ts_stream_t *ts, ngx_ts_header_t *h, ngx_buf_t *b)
 {
-    /* 
+    /*
      * PAT
      * ISO/IEC 13818-1 : 2000 (E)
      * 2.4.4.3 Program association Table, p. 43
