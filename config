@@ -1,0 +1,9 @@
+ngx_module_type=HTTP
+ngx_addon_name=ngx_http_ts_module
+ngx_module_name=ngx_http_ts_module
+ngx_module_incs=
+ngx_module_deps="$ngx_addon_dir/ngx_ts_stream.h"
+ngx_module_srcs="$ngx_addon_dir/ngx_http_ts_module.c \
+                 $ngx_addon_dir/ngx_ts_stream.c"
+
+. auto/module
