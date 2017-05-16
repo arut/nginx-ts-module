@@ -31,6 +31,7 @@ Example #1::
             listen 8000;
             location / {
                 ts;
+                ts_hls /tmp/hls segment=5s;
             }
         }
     }

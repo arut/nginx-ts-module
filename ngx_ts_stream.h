@@ -14,9 +14,12 @@
 
 typedef struct {
     u_char                        type;
+    u_char                        sid;
     uint16_t                      pid;
     uint64_t                      pts;
     uint64_t                      dts;
+    unsigned                      ptsf:1;
+    unsigned                      rand:1;
     ngx_chain_t                  *bufs; /* ES */
 } ngx_ts_es_t;
 
@@ -24,23 +27,24 @@ typedef struct {
 typedef struct {
     uint16_t                      number;
     uint16_t                      pid;
+    uint16_t                      pcr_pid;
     ngx_uint_t                    nes;
     ngx_ts_es_t                  *es;
     ngx_chain_t                  *bufs; /* PMT */
 } ngx_ts_program_t;
 
 
-typedef ngx_int_t (*ngx_ts_program_handler_pt)(ngx_ts_program_t *prog,
-    void *data);
-typedef ngx_int_t (*ngx_ts_frame_handler_pt)(ngx_ts_program_t *prog,
-    ngx_ts_es_t *es, ngx_chain_t *bufs, void *data);
+typedef struct ngx_ts_stream_s  ngx_ts_stream_t;
 
 
-typedef struct {
-    ngx_ts_program_handler_pt     program_handler;
-    ngx_ts_frame_handler_pt       frame_handler;
-    void                         *data;
+typedef ngx_int_t (*ngx_ts_pat_handler_pt)(ngx_ts_stream_t *ts);
+typedef ngx_int_t (*ngx_ts_pmt_handler_pt)(ngx_ts_stream_t *ts,
+    ngx_ts_program_t *prog);
+typedef ngx_int_t (*ngx_ts_pes_handler_pt)(ngx_ts_stream_t *ts,
+    ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
 
+
+struct ngx_ts_stream_s {
     ngx_uint_t                    nprogs;
     ngx_ts_program_t             *progs;
     ngx_log_t                    *log;
@@ -48,10 +52,21 @@ typedef struct {
     ngx_buf_t                    *buf;
     ngx_chain_t                  *free;
     ngx_chain_t                  *bufs; /* PAT */
-} ngx_ts_stream_t;
+
+    ngx_ts_pat_handler_pt         pat_handler;
+    ngx_ts_pmt_handler_pt         pmt_handler;
+    ngx_ts_pes_handler_pt         pes_handler;
+
+    void                         *data;
+};
 
 
-ngx_int_t ngx_ts_read(ngx_ts_stream_t *ts, u_char *data, size_t len);
+ngx_int_t ngx_ts_read(ngx_ts_stream_t *ts, ngx_chain_t *in);
+ngx_chain_t *ngx_ts_write_pat(ngx_ts_stream_t *ts);
+ngx_chain_t *ngx_ts_write_pmt(ngx_ts_stream_t *ts, ngx_ts_program_t *prog);
+ngx_chain_t *ngx_ts_write_pes(ngx_ts_stream_t *ts, ngx_ts_program_t *prog,
+    ngx_ts_es_t *es, ngx_chain_t *bufs);
+void ngx_ts_free_chain(ngx_ts_stream_t *ts, ngx_chain_t **ll);
 
 
 #endif /* _NGX_TS_STREAM_H_INCLUDED_ */
