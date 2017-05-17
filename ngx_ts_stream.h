@@ -15,11 +15,13 @@
 typedef struct {
     u_char                        type;
     u_char                        sid;
+    u_char                        cont;
     uint16_t                      pid;
     uint64_t                      pts;
     uint64_t                      dts;
     unsigned                      ptsf:1;
     unsigned                      rand:1;
+    unsigned                      video:1;
     ngx_chain_t                  *bufs; /* ES */
 } ngx_ts_es_t;
 
@@ -28,6 +30,8 @@ typedef struct {
     uint16_t                      number;
     uint16_t                      pid;
     uint16_t                      pcr_pid;
+    uint64_t                      pcr;
+    ngx_uint_t                    video;  /* unisgned  video:1; */
     ngx_uint_t                    nes;
     ngx_ts_es_t                  *es;
     ngx_chain_t                  *bufs; /* PMT */

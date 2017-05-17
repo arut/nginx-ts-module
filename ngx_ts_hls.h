@@ -42,6 +42,8 @@ typedef struct {
     ngx_uint_t             nsegs;
     ngx_uint_t             seg;
     uint64_t               seg_pts;
+
+    ngx_uint_t             done;  /* unsigned  done:1; */
 } ngx_ts_hls_t;
 
 

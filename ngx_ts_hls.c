@@ -15,6 +15,13 @@ static ngx_int_t ngx_ts_hls_close_segment(ngx_ts_hls_t *hls);
 static ngx_int_t ngx_ts_hls_update_playlist(ngx_ts_hls_t *hls);
 static ngx_int_t ngx_ts_hls_open_segment(ngx_ts_hls_t *hls);
 
+static ngx_int_t ngx_ts_hls_manage_file(ngx_tree_ctx_t *ctx, ngx_str_t *path);
+static ngx_int_t ngx_ts_hls_manage_directory(ngx_tree_ctx_t *ctx,
+    ngx_str_t *path);
+static ngx_int_t ngx_ts_hls_delete_directory(ngx_tree_ctx_t *ctx,
+    ngx_str_t *path);
+static ngx_int_t ngx_ts_hls_delete_file(ngx_tree_ctx_t *ctx, ngx_str_t *path);
+
 
 ngx_ts_hls_t *
 ngx_ts_hls_create(ngx_ts_hls_conf_t *conf, ngx_ts_stream_t *ts, ngx_str_t *name)
@@ -99,7 +106,7 @@ ngx_ts_hls_cleanup(void *data)
 {
     ngx_ts_hls_t *hls = data;
 
-    uint64_t               d, maxd;
+    int64_t                d, maxd;
     ngx_uint_t             n;
     ngx_ts_es_t           *es;
     ngx_ts_stream_t       *ts;
@@ -140,6 +147,7 @@ ngx_ts_hls_cleanup(void *data)
     seg->duration = maxd;
 
     hls->seg++;
+    hls->done = 1;
 
     (void) ngx_ts_hls_update_playlist(hls);
 }
@@ -184,29 +192,47 @@ ngx_ts_hls_write_frame(ngx_ts_hls_t *hls, ngx_ts_program_t *prog,
 static ngx_int_t
 ngx_ts_hls_close_segment(ngx_ts_hls_t *hls)
 {
-    uint64_t               d, min_seg, max_seg;
+    int64_t                d, min_seg, max_seg;
     ngx_uint_t             n;
     ngx_ts_es_t           *es;
     ngx_ts_stream_t       *ts;
     ngx_ts_program_t      *prog;
     ngx_ts_hls_segment_t  *seg;
 
-    if (hls->file.fd == NGX_INVALID_FILE) {
-        return NGX_OK;
-    }
-
     ts = hls->ts;
     prog = ts->progs;
 
-    min_seg = (uint64_t) hls->conf->min_seg * 90;
-    max_seg = (uint64_t) hls->conf->max_seg * 90;
+    if (hls->file.fd == NGX_INVALID_FILE) {
+        /* segment not started */
+
+        for (n = 0; n < prog->nes; n++) {
+            es = &prog->es[n];
+
+            if (es->ptsf) {
+                d = es->pts - hls->seg_pts;
+
+                if (d > 0) {
+                    hls->seg_pts = es->pts;
+                }
+            }
+        }
+
+        return NGX_OK;
+    }
+
+    min_seg = (int64_t) hls->conf->min_seg * 90;
+    max_seg = (int64_t) hls->conf->max_seg * 90;
 
     for (n = 0; n < prog->nes; n++) {
         es = &prog->es[n];
 
         if (es->ptsf) {
             d = es->pts - hls->seg_pts;
-            if (d >= max_seg || (d >= min_seg && es->rand)) {
+
+            if (d >= max_seg
+                || (d >= min_seg && !prog->video)
+                || (d >= min_seg && es->video && es->rand))
+            {
                 hls->seg_pts = es->pts;
                 goto close;
             }
@@ -276,6 +302,10 @@ ngx_ts_hls_update_playlist(ngx_ts_hls_t *hls)
         }
     }
 
+    if (hls->done) {
+        n += sizeof("\n#EXT-X-ENDLIST\n") - 1;
+    }
+
     data = ngx_alloc(n, hls->ts->log);
     if (data == NULL) {
         return NGX_ERROR;
@@ -286,6 +316,7 @@ ngx_ts_hls_update_playlist(ngx_ts_hls_t *hls)
     ms = hls->seg <= hls->nsegs ? 0 : hls->seg - hls->nsegs;
     td = (maxd + 90000 - 1) / 90000;
 
+    /* TODO output max_seg as TARGETDURATION to make it constant */
     p = ngx_sprintf(p, "#EXTM3U\n"
                        "#EXT-X-VERSION:3\n"
                        "#EXT-X-MEDIA-SEQUENCE:%ui\n"
@@ -299,6 +330,11 @@ ngx_ts_hls_update_playlist(ngx_ts_hls_t *hls)
                                "%ui.ts\n",
                             seg->duration / 90000., seg->id);
         }
+    }
+
+    if (hls->done) {
+        p = ngx_cpymem(p, "\n#EXT-X-ENDLIST\n",
+                       sizeof("\n#EXT-X-ENDLIST\n") - 1);
     }
 
     fd = ngx_open_file(hls->m3u8_tmp_path,
@@ -440,9 +476,94 @@ ngx_ts_hls_file_manager(void *data)
 {
     ngx_ts_hls_conf_t *hls = data;
 
-    /* TODO */
+    ngx_tree_ctx_t  tree;
 
-    (void) hls;
+    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ngx_cycle->log, 0,
+                  "ts hls file manager");
 
-    return 10 * 1000;
+    tree.init_handler = NULL;
+    tree.file_handler = ngx_ts_hls_manage_file;
+    tree.pre_tree_handler = ngx_ts_hls_manage_directory;
+    tree.post_tree_handler = ngx_ts_hls_delete_directory;
+    tree.spec_handler = ngx_ts_hls_delete_file;
+    tree.data = hls;
+    tree.alloc = 0;
+    tree.log = ngx_cycle->log;
+
+    (void) ngx_walk_tree(&tree, &hls->path->name);
+
+    return hls->max_seg * hls->nsegs;
+}
+
+
+static ngx_int_t
+ngx_ts_hls_manage_file(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    ngx_ts_hls_conf_t *hls = ctx->data;
+
+    time_t  age, max_age;
+
+    age = ngx_time() - ctx->mtime;
+
+    max_age = 0;
+
+    if (path->len >= 5
+        && ngx_memcmp(path->data + path->len - 5, ".m3u8", 5) == 0)
+    {
+        max_age = hls->max_seg * hls->nsegs / 1000;
+    }
+
+    if (path->len >= 3
+        && ngx_memcmp(path->data + path->len - 3, ".ts", 3) == 0)
+    {
+        max_age = hls->max_seg * hls->nsegs / 500;
+    }
+
+    ngx_log_debug3(NGX_LOG_DEBUG_CORE, ctx->log, 0,
+                   "ts hls file \"%s\", age:%T, max_age:%T",
+                   path->data, age, max_age);
+
+    if (age < max_age) {
+        return NGX_OK;
+    }
+
+    return ngx_ts_hls_delete_file(ctx, path);
+}
+
+
+static ngx_int_t
+ngx_ts_hls_manage_directory(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_ts_hls_delete_directory(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ctx->log, 0,
+                   "ts hls delete dir: \"%s\"", path->data);
+
+    /* non-empty directory will not be removed */
+
+    /* TODO count files instead */
+
+    (void) ngx_delete_dir(path->data);
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_ts_hls_delete_file(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ctx->log, 0,
+                   "ts hls file delete: \"%s\"", path->data);
+
+    if (ngx_delete_file(path->data) == NGX_FILE_ERROR) {
+        ngx_log_error(NGX_LOG_CRIT, ctx->log, ngx_errno,
+                      ngx_delete_file_n " \"%s\" failed", path->data);
+    }
+
+    return NGX_OK;
 }

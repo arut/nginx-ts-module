@@ -257,7 +257,7 @@ ngx_http_ts_init(ngx_http_request_t *r)
     ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
 
     if (ngx_ts_read(ctx->ts, rb->bufs) != NGX_OK) {
-        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        ngx_http_finalize_request(r, NGX_ERROR);
         return;
     }
 
