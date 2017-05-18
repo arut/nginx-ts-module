@@ -30,18 +30,31 @@ typedef struct {
 
 typedef struct {
     ngx_file_t             file;
-    ngx_str_t              path;
-    u_char                *m3u8_path;
-    u_char                *m3u8_tmp_path;
-
     ngx_chain_t           *prologue;
-    ngx_ts_stream_t       *ts;
-    ngx_ts_hls_conf_t     *conf;
 
     ngx_ts_hls_segment_t  *segs;
     ngx_uint_t             nsegs;
     ngx_uint_t             seg;
     uint64_t               seg_pts;
+
+    u_char                *m3u8_path;
+    u_char                *m3u8_tmp_path;
+    ngx_str_t              path;
+
+    ngx_ts_program_t      *prog;
+} ngx_ts_hls_variant_t;
+
+
+typedef struct {
+    ngx_ts_stream_t       *ts;
+    ngx_ts_hls_conf_t     *conf;
+
+    u_char                *m3u8_path;
+    u_char                *m3u8_tmp_path;
+    u_char                *path;
+
+    ngx_ts_hls_variant_t  *vars;
+    ngx_uint_t             nvars;
 
     ngx_uint_t             done;  /* unsigned  done:1; */
 } ngx_ts_hls_t;

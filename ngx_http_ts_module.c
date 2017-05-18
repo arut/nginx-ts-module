@@ -129,13 +129,6 @@ ngx_http_ts_handler(ngx_http_request_t *r)
 
     /* XXX detect streams with the same ctx->name, add shared zone */
 
-    if (tlcf->hls) {
-        ctx->hls = ngx_ts_hls_create(tlcf->hls, ctx->ts, &ctx->name);
-        if (ctx->hls == NULL) {
-            return  NGX_ERROR;
-        }
-    }
-
     ngx_http_set_ctx(r, ctx, ngx_http_ts_module);
 
     r->request_body_no_buffering = 1;
@@ -193,10 +186,22 @@ ngx_http_ts_pat_handler(ngx_ts_stream_t *ts)
 {
     ngx_http_request_t *r = ts->data;
 
+    ngx_http_ts_ctx_t       *ctx;
+    ngx_http_ts_loc_conf_t  *tlcf;
+
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http ts pat nprogs:%ui",  ts->nprogs);
 
-    (void) r;
+    tlcf = ngx_http_get_module_loc_conf(r, ngx_http_ts_module);
+
+    if (tlcf->hls) {
+        ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
+
+        ctx->hls = ngx_ts_hls_create(tlcf->hls, ctx->ts, &ctx->name);
+        if (ctx->hls == NULL) {
+            return  NGX_ERROR;
+        }
+    }
 
     return NGX_OK;
 }
