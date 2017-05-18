@@ -519,6 +519,12 @@ ngx_ts_hls_manage_file(ngx_tree_ctx_t *ctx, ngx_str_t *path)
         max_age = hls->max_seg * hls->nsegs / 500;
     }
 
+    if (path->len >= 4
+        && ngx_memcmp(path->data + path->len - 4, ".tmp", 3) == 0)
+    {
+        max_age = 10;
+    }
+
     ngx_log_debug3(NGX_LOG_DEBUG_CORE, ctx->log, 0,
                    "ts hls file \"%s\", age:%T, max_age:%T",
                    path->data, age, max_age);
