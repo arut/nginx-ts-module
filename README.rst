@@ -71,6 +71,10 @@ index.html::
         <source src="hls/sintel/index.m3u8" type="application/x-mpegURL">
     </video>
 
-broadcast an mp4 file::
+broadcast mp4 file::
 
     ffmpeg -re -i ~/Movies/sintel.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/publish/sintel
+
+broadcast multi-bitrate mp4 file::
+
+    ffmpeg -re -i ~/Movies/sintel.mp4 -map 0:0 -map 0:1 -map 0:1 -c copy -bsf:v h264_mp4toannexb -program "st=0:st=1" -program "st=2" -f mpegts http://127.0.0.1:8000/publish/sintel
