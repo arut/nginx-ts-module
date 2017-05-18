@@ -25,12 +25,14 @@ typedef struct {
 typedef struct {
     ngx_uint_t             id;
     uint64_t               duration;
+    off_t                  size;
 } ngx_ts_hls_segment_t;
 
 
 typedef struct {
     ngx_file_t             file;
     ngx_chain_t           *prologue;
+    ngx_uint_t             bandwidth;
 
     ngx_ts_hls_segment_t  *segs;
     ngx_uint_t             nsegs;
