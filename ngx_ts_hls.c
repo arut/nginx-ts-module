@@ -628,7 +628,7 @@ ngx_ts_hls_open_segment(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var)
     }
 
     if (var->prologue == NULL) {
-        out = ngx_ts_write_pat(ts);
+        out = ngx_ts_write_pat(ts, var->prog);
         if (out == NULL) {
             return NGX_ERROR;
         }

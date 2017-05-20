@@ -25,13 +25,13 @@ typedef struct {
 
 
 static ngx_int_t ngx_http_ts_handler(ngx_http_request_t *r);
+static void ngx_http_ts_init(ngx_http_request_t *r);
 static void ngx_http_ts_read_event_handler(ngx_http_request_t *r);
 static ngx_int_t ngx_http_ts_pat_handler(ngx_ts_stream_t *ts);
 static ngx_int_t ngx_http_ts_pmt_handler(ngx_ts_stream_t *ts,
     ngx_ts_program_t *prog);
 static ngx_int_t ngx_http_ts_pes_handler(ngx_ts_stream_t *ts,
     ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
-static void ngx_http_ts_init(ngx_http_request_t *r);
 
 static char *ngx_http_ts(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static char *ngx_http_ts_hls(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
@@ -144,6 +144,32 @@ ngx_http_ts_handler(ngx_http_request_t *r)
 
 
 static void
+ngx_http_ts_init(ngx_http_request_t *r)
+{
+    ngx_http_ts_ctx_t        *ctx;
+    ngx_http_request_body_t  *rb;
+
+    rb = r->request_body;
+
+    if (rb == NULL) {
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        return;
+    }
+
+    ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
+
+    if (ngx_ts_read(ctx->ts, rb->bufs) != NGX_OK) {
+        ngx_http_finalize_request(r, NGX_ERROR);
+        return;
+    }
+
+    if (r->reading_body) {
+        r->read_event_handler = ngx_http_ts_read_event_handler;
+    }
+}
+
+
+static void
 ngx_http_ts_read_event_handler(ngx_http_request_t *r)
 {
     ngx_int_t                 rc;
@@ -243,32 +269,6 @@ ngx_http_ts_pes_handler(ngx_ts_stream_t *ts, ngx_ts_program_t *prog,
     }
 
     return NGX_OK;
-}
-
-
-static void
-ngx_http_ts_init(ngx_http_request_t *r)
-{
-    ngx_http_ts_ctx_t        *ctx;
-    ngx_http_request_body_t  *rb;
-
-    rb = r->request_body;
-
-    if (rb == NULL) {
-        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
-        return;
-    }
-
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
-
-    if (ngx_ts_read(ctx->ts, rb->bufs) != NGX_OK) {
-        ngx_http_finalize_request(r, NGX_ERROR);
-        return;
-    }
-
-    if (r->reading_body) {
-        r->read_event_handler = ngx_http_ts_read_event_handler;
-    }
 }
 
 

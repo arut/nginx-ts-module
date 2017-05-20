@@ -66,7 +66,7 @@ struct ngx_ts_stream_s {
 
 
 ngx_int_t ngx_ts_read(ngx_ts_stream_t *ts, ngx_chain_t *in);
-ngx_chain_t *ngx_ts_write_pat(ngx_ts_stream_t *ts);
+ngx_chain_t *ngx_ts_write_pat(ngx_ts_stream_t *ts, ngx_ts_program_t *prog);
 ngx_chain_t *ngx_ts_write_pmt(ngx_ts_stream_t *ts, ngx_ts_program_t *prog);
 ngx_chain_t *ngx_ts_write_pes(ngx_ts_stream_t *ts, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *bufs);

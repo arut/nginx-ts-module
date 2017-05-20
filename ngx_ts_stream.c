@@ -893,18 +893,25 @@ ngx_ts_read_pes(ngx_ts_stream_t *ts, ngx_ts_program_t *prog, ngx_ts_es_t *es,
 
 
 ngx_chain_t *
-ngx_ts_write_pat(ngx_ts_stream_t *ts)
+ngx_ts_write_pat(ngx_ts_stream_t *ts, ngx_ts_program_t *prog)
 {
-    size_t             len;
-    u_char            *p, *data;
-    uint32_t           crc;
-    ngx_buf_t          b;
-    ngx_uint_t         n;
-    ngx_chain_t        in;
-    ngx_ts_header_t    h;
-    ngx_ts_program_t  *prog;
+    size_t            len;
+    u_char           *p, *data;
+    uint32_t          crc;
+    ngx_buf_t         b;
+    ngx_uint_t        n, nprogs;
+    ngx_chain_t       in;
+    ngx_ts_header_t   h;
 
-    len = 9 + ts->nprogs * 4;
+    if (prog) {
+        nprogs = 1;
+
+    } else {
+        nprogs = ts->nprogs;
+        prog = ts->progs;
+    }
+
+    len = 9 + nprogs * 4;
 
     data = ngx_pnalloc(ts->pool, 4 + len);
     if (data == NULL) {
@@ -936,9 +943,7 @@ ngx_ts_write_pat(ngx_ts_stream_t *ts)
     /* last_section_number */
     *p++ = 0;
 
-    for (n = 0; n < ts->nprogs; n++) {
-        prog = &ts->progs[n];
-
+    for (n = 0; n < nprogs; n++, prog++) {
         /* program_number */
         *p++ = (u_char) (prog->number >> 8);
         *p++ = (u_char) prog->number;
