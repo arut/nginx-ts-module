@@ -55,14 +55,14 @@ ngx_ts_hls_create(ngx_ts_hls_conf_t *conf, ngx_ts_stream_t *ts, ngx_str_t *name)
         return NULL;
     }
 
+    ngx_sprintf(hls->path, "%V/%V%Z", &conf->path->name, name);
+
     hls->nvars = ts->nprogs;
     hls->vars = ngx_pcalloc(ts->pool,
                             sizeof(ngx_ts_hls_variant_t) * ts->nprogs);
     if (hls->vars == NULL) {
         return NULL;
     }
-
-    ngx_sprintf(hls->path, "%V/%V%Z", &conf->path->name, name);
 
     if (hls->nvars > 1) {
         /* index.m3u8 */

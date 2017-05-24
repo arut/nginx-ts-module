@@ -24,7 +24,7 @@ typedef struct {
 
 typedef struct {
     ngx_uint_t             id;
-    uint64_t               duration;
+    uint64_t               duration; /* XXX 64? */
     off_t                  size;
 } ngx_ts_hls_segment_t;
 
