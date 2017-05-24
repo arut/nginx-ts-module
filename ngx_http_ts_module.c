@@ -93,12 +93,9 @@ ngx_module_t  ngx_http_ts_module = {
 static ngx_int_t
 ngx_http_ts_handler(ngx_http_request_t *r)
 {
-    ngx_int_t                rc;
-    ngx_uint_t               n;
-    ngx_http_ts_ctx_t       *ctx;
-    ngx_http_ts_loc_conf_t  *tlcf;
-
-    tlcf = ngx_http_get_module_loc_conf(r, ngx_http_ts_module);
+    ngx_int_t           rc;
+    ngx_uint_t          n;
+    ngx_http_ts_ctx_t  *ctx;
 
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_ts_ctx_t));
     if (ctx == NULL) {
@@ -241,6 +238,8 @@ ngx_http_ts_pmt_handler(ngx_ts_stream_t *ts, ngx_ts_program_t *prog)
     ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http ts pmt pid:0x%04uxd, n:%ui, nes:%ui",
                    (unsigned) prog->pid, (ngx_uint_t) prog->number, prog->nes);
+
+    (void) r;
 
     return NGX_OK;
 }
