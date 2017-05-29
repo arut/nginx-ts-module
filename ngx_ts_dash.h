@@ -16,14 +16,32 @@
 
 typedef struct {
     ngx_path_t             *path;
+    ngx_msec_t              min_seg;
+    ngx_msec_t              max_seg;
+    ngx_uint_t              nsegs;
 } ngx_ts_dash_conf_t;
 
 
 typedef struct {
-    /* TODO 32? */
     uint64_t                start;
     uint64_t                duration;
 } ngx_ts_dash_segment_t;
+
+
+typedef struct {
+    u_char                 *dts;  /* 64-bit */
+    u_char                 *pts;  /* 64-bit */
+    u_char                 *seq;
+    u_char                 *duration;
+    u_char                 *sample_duration;
+    u_char                 *nsamples;
+    u_char                 *traf;
+    u_char                 *trun;
+    u_char                 *moof;
+    u_char                 *moof_mdat;
+    u_char                 *moof_data;
+    u_char                 *mdat;
+} ngx_ts_dash_subs_t;
 
 
 typedef struct {
@@ -31,12 +49,20 @@ typedef struct {
     ngx_uint_t              nsegs;
     ngx_uint_t              seg;
     uint64_t                seg_pts;
+    uint64_t                seg_dts;
+    uint64_t                pts;
 
     ngx_ts_es_t            *es;
     ngx_str_t               path;
 
     ngx_chain_t            *meta;
     ngx_chain_t            *data;
+
+    ngx_uint_t              nsamples;
+    ngx_uint_t              nmeta;
+    ngx_uint_t              ndata;
+
+    ngx_ts_dash_subs_t      subs;
 } ngx_ts_dash_rep_t;
 
 
