@@ -10,17 +10,20 @@
 
 #include "ngx_ts_stream.h"
 #include "ngx_ts_hls.h"
+#include "ngx_ts_dash.h"
 
 
 typedef struct {
-    ngx_ts_hls_conf_t  *hls;
+    ngx_ts_hls_conf_t   *hls;
+    ngx_ts_dash_conf_t  *dash;
 } ngx_http_ts_loc_conf_t;
 
 
 typedef struct {
-    ngx_ts_stream_t    *ts;
-    ngx_ts_hls_t       *hls;
-    ngx_str_t           name;
+    ngx_ts_stream_t     *ts;
+    ngx_ts_hls_t        *hls;
+    ngx_ts_dash_t       *dash;
+    ngx_str_t            name;
 } ngx_http_ts_ctx_t;
 
 
@@ -35,6 +38,7 @@ static ngx_int_t ngx_http_ts_pes_handler(ngx_ts_stream_t *ts,
 
 static char *ngx_http_ts(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static char *ngx_http_ts_hls(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static char *ngx_http_ts_dash(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static void *ngx_http_ts_create_conf(ngx_conf_t *cf);
 static char *ngx_http_ts_merge_conf(ngx_conf_t *cf, void *parent, void *child);
 
@@ -51,6 +55,13 @@ static ngx_command_t  ngx_http_ts_commands[] = {
     { ngx_string("ts_hls"),
       NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
       ngx_http_ts_hls,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      0,
+      NULL },
+
+    { ngx_string("ts_dash"),
+      NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
+      ngx_http_ts_dash,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
       NULL },
@@ -217,12 +228,19 @@ ngx_http_ts_pat_handler(ngx_ts_stream_t *ts)
 
     tlcf = ngx_http_get_module_loc_conf(r, ngx_http_ts_module);
 
-    if (tlcf->hls) {
-        ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
+    ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
 
+    if (tlcf->hls) {
         ctx->hls = ngx_ts_hls_create(tlcf->hls, ctx->ts, &ctx->name);
         if (ctx->hls == NULL) {
             return  NGX_ERROR;
+        }
+    }
+
+    if (tlcf->dash) {
+        ctx->dash = ngx_ts_dash_create(tlcf->dash, ctx->ts, &ctx->name);
+        if (ctx->dash == NULL) {
+            return NGX_ERROR;
         }
     }
 
@@ -392,6 +410,120 @@ ngx_http_ts_hls(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     tscf->hls = hls;
+
+    return NGX_CONF_OK;
+}
+
+
+static char *
+ngx_http_ts_dash(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_ts_loc_conf_t *tscf = conf;
+
+    ngx_str_t           *value, s;
+    ngx_int_t            v;
+    ngx_uint_t           i, nsegs;
+    ngx_msec_t           min_seg, max_seg;
+    ngx_ts_dash_conf_t  *dash;
+
+    if (tscf->dash) {
+        return "is duplicate";
+    }
+
+    dash = ngx_pcalloc(cf->pool, sizeof(ngx_ts_dash_conf_t));
+    if (dash == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    dash->path = ngx_pcalloc(cf->pool, sizeof(ngx_path_t));
+    if (dash->path == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    value = cf->args->elts;
+
+    dash->path->name = value[1];
+
+    if (dash->path->name.data[dash->path->name.len - 1] == '/') {
+        dash->path->name.len--;
+    }
+
+    if (ngx_conf_full_name(cf->cycle, &dash->path->name, 0) != NGX_OK) {
+        return NGX_CONF_ERROR;
+    }
+
+    min_seg = 5000;
+    max_seg = 0;
+    nsegs = 6;
+
+    for (i = 2; i < cf->args->nelts; i++) {
+
+        if (ngx_strncmp(value[i].data, "segment=", 7) == 0) {
+
+            s.len = value[i].len - 8;
+            s.data = value[i].data + 8;
+
+            min_seg = ngx_parse_time(&s, 0);
+            if (min_seg == (ngx_msec_t) NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid segment duration value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
+        if (ngx_strncmp(value[i].data, "max_segment=", 7) == 0) {
+
+            s.len = value[i].len - 12;
+            s.data = value[i].data + 12;
+
+            max_seg = ngx_parse_time(&s, 0);
+            if (max_seg == (ngx_msec_t) NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid max segment duration value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
+        if (ngx_strncmp(value[i].data, "segments=", 7) == 0) {
+
+            v = ngx_atoi(value[i].data + 9, value[i].len - 9);
+            if (v == NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid segments number value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            nsegs = v;
+
+            continue;
+        }
+
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "invalid parameter \"%V\"", &value[i]);
+        return NGX_CONF_ERROR;
+    }
+
+    dash->min_seg = min_seg;
+    dash->max_seg = max_seg ? max_seg : min_seg * 3;
+    dash->nsegs = nsegs;
+
+    dash->path->manager = ngx_ts_dash_file_manager;
+    dash->path->data = dash;
+    dash->path->conf_file = cf->conf_file->file.name.data;
+    dash->path->line = cf->conf_file->line;
+
+    if (ngx_add_path(cf, &dash->path) != NGX_OK) {
+        return NGX_CONF_ERROR;
+    }
+
+    tscf->dash = dash;
 
     return NGX_CONF_OK;
 }

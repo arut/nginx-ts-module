@@ -638,10 +638,10 @@ ngx_ts_read_pmt(ngx_ts_stream_t *ts, ngx_ts_program_t *prog, ngx_ts_header_t *h,
         es->type = type;
         es->pid = pid;
 
-        if (type == 0x01      /* ISO/IEC 11172, MPEG-1 Video */
-            || type == 0x02   /* ISO/IEC 13818-2, MPEG-2 Video */
-            || type == 0x10   /* ISO/IEC 14496-2, MPEG-4 Video */
-            || type == 0x1b)  /* ISO/IEC 14496-10, AVC */
+        if (type == NGX_TS_VIDEO_MPEG1
+            || type == NGX_TS_VIDEO_MPEG2
+            || type == NGX_TS_VIDEO_MPEG4
+            || type == NGX_TS_VIDEO_AVC)
         {
             es->video = 1;
             prog->video = 1;

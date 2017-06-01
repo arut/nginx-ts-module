@@ -52,11 +52,16 @@ typedef struct {
     uint64_t                seg_dts;
     uint64_t                pts;
 
+    ngx_chain_t            *sps;
+    ngx_chain_t            *pps;
+
     ngx_ts_es_t            *es;
     ngx_str_t               path;
 
     ngx_chain_t            *meta;
+    ngx_chain_t            *last_meta;
     ngx_chain_t            *data;
+    ngx_chain_t            *last_data;
 
     ngx_uint_t              nsamples;
     ngx_uint_t              nmeta;

@@ -12,6 +12,24 @@
 #define _NGX_TS_STREAM_H_INCLUDED_
 
 
+/*
+ * ISO/IEC 13818-1 : 2000 (E)
+ * Table 2-29 – Stream type assignments, p. 48
+ *
+ * ISO/IEC 13818-1:2007/Amd.3:2009 (E)
+ * Table 2-34 – Stream type assignments, p. 6
+ */
+
+#define NGX_TS_VIDEO_MPEG1     0x01 /* ISO/IEC 11172-2, MPEG-1 Video */
+#define NGX_TS_VIDEO_MPEG2     0x02 /* ISO/IEC 13818-2, MPEG-2 Video */
+#define NGX_TS_VIDEO_MPEG4     0x10 /* ISO/IEC 14496-2, MPEG-4 Video */
+#define NGX_TS_VIDEO_AVC       0x1b /* ISO/IEC 14496-10, AVC */
+
+#define NGX_TS_AUDIO_MPEG1     0x03 /* ISO/IEC 11172-3, MPEG-1 Audio */
+#define NGX_TS_AUDIO_MPEG2     0x04 /* ISO/IEC 13818-3, MPEG-2 Audio */
+#define NGX_TS_AUDIO_AAC_ADTS  0x0f /* ISO/IEC 13818-7, MPEG-2 AAC ADTS Audio */
+
+
 typedef struct {
     u_char                        type;
     u_char                        sid;
