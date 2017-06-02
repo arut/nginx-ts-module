@@ -253,11 +253,19 @@ ngx_http_ts_pmt_handler(ngx_ts_stream_t *ts, ngx_ts_program_t *prog)
 {
     ngx_http_request_t *r = ts->data;
 
+    ngx_http_ts_ctx_t  *ctx;
+
     ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http ts pmt pid:0x%04uxd, n:%ui, nes:%ui",
                    (unsigned) prog->pid, (ngx_uint_t) prog->number, prog->nes);
 
-    (void) r;
+    ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
+
+    if (ctx->dash) {
+        if (ngx_ts_dash_handle_pmt(ctx->dash, prog) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
 
     return NGX_OK;
 }
@@ -281,6 +289,12 @@ ngx_http_ts_pes_handler(ngx_ts_stream_t *ts, ngx_ts_program_t *prog,
 
     if (ctx->hls) {
         if (ngx_ts_hls_write_frame(ctx->hls, prog, es, bufs) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
+
+    if (ctx->dash) {
+        if (ngx_ts_dash_write_frame(ctx->dash, prog, es, bufs) != NGX_OK) {
             return NGX_ERROR;
         }
     }

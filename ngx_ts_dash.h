@@ -81,7 +81,7 @@ typedef struct {
     ngx_ts_stream_t        *ts;
     ngx_ts_dash_conf_t     *conf;
 
-    u_char                 *path;
+    ngx_str_t               path;
     ngx_chain_t            *free;
 
     ngx_ts_dash_set_t      *sets;
@@ -91,6 +91,7 @@ typedef struct {
 
 ngx_ts_dash_t *ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name);
+ngx_int_t ngx_ts_dash_handle_pmt(ngx_ts_dash_t *dash, ngx_ts_program_t *prog);
 ngx_int_t ngx_ts_dash_write_frame(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *bufs);
 ngx_msec_t ngx_ts_dash_file_manager(void *data);

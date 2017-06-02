@@ -51,10 +51,7 @@ ngx_ts_dash_t *
 ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name)
 {
-    size_t              len, dirlen;
-    ngx_ts_dash_t      *dash;
-    ngx_ts_dash_rep_t  *rep;
-    ngx_ts_dash_set_t  *set;
+    ngx_ts_dash_t  *dash;
 
     dash = ngx_pcalloc(ts->pool, sizeof(ngx_ts_dash_t));
     if (dash == NULL) {
@@ -64,66 +61,119 @@ ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     dash->conf = conf;
     dash->ts = ts;
 
-    dirlen = conf->path->name.len + 1 + name->len;
-
-    dash->path = ngx_pnalloc(ts->pool, dirlen + 1);
-    if (dash->path == NULL) {
+    dash->path.len = conf->path->name.len + 1 + name->len;
+    dash->path.data = ngx_pnalloc(ts->pool, dash->path.len + 1);
+    if (dash->path.data == NULL) {
         return NULL;
     }
 
-    ngx_sprintf(dash->path, "%V/%V%Z", &conf->path->name, name);
-
-    /*XXX*/
-
-    /*
-     * XXX choose by type
-     allow these es->type:
-     case NGX_TS_VIDEO_MPEG1:
-     case NGX_TS_VIDEO_MPEG2:
-     case NGX_TS_VIDEO_MPEG4:
-     case NGX_TS_VIDEO_AVC:
-     case NGX_TS_AUDIO_MPEG1:
-     case NGX_TS_AUDIO_MPEG2:
-     case NGX_TS_AUDIO_AAC_ADTS:
-    */
-
-    dash->nsets = 1;
-    dash->sets = ngx_pcalloc(ts->pool, dash->nsets * sizeof(ngx_ts_dash_set_t));
-    if (dash->sets == NULL) {
-        return NULL;
-    }
-
-    set = dash->sets;
-
-    set->nreps = 1;
-    set->reps = ngx_pcalloc(ts->pool, set->nreps * sizeof(ngx_ts_dash_rep_t));
-    if (set->reps == NULL) {
-        return NULL;
-    }
-
-    rep = set->reps;
-
-    rep->es = ts->progs->es; /* XXX first es whatever it is */
-
-    rep->nsegs = conf->nsegs;
-    rep->segs = ngx_pcalloc(ts->pool,
-                            rep->nsegs * sizeof(ngx_ts_dash_segment_t));
-    if (rep->segs == NULL) {
-        return NULL;
-    }
-
-    len = dirlen + 1 + NGX_INT_T_LEN + 1 + NGX_INT_T_LEN + sizeof(".mp4");
-
-    rep->path.data = ngx_pnalloc(ts->pool, len);
-    if (rep->path.data == NULL) {
-        return NULL;
-    }
-
-    rep->path.len = ngx_sprintf(rep->path.data, "%s/%ui.",
-                                (ngx_uint_t) rep->es->pid)
-                    - rep->path.data;
+    ngx_sprintf(dash->path.data, "%V/%V%Z", &conf->path->name, name);
 
     return dash;
+}
+
+
+ngx_int_t
+ngx_ts_dash_handle_pmt(ngx_ts_dash_t *dash, ngx_ts_program_t *new_prog)
+{
+    size_t              len;
+    ngx_uint_t          i, j, n;
+    ngx_ts_es_t        *es;
+    ngx_ts_stream_t    *ts;
+    ngx_ts_program_t   *prog;
+    ngx_ts_dash_rep_t  *rep;
+    ngx_ts_dash_set_t  *set, *aset, *vset;
+
+    ts = dash->ts;
+
+    n = 0;
+
+    for (i = 0; i < ts->nprogs; i++) {
+        prog = &ts->progs[i];
+
+        if (prog->es == NULL) {
+            return NGX_OK;
+        }
+
+        n += prog->nes;
+    }
+
+    dash->nsets = 0;
+    dash->sets = ngx_pcalloc(ts->pool, 2 * sizeof(ngx_ts_dash_set_t));
+    if (dash->sets == NULL) {
+        return NGX_ERROR;
+    }
+
+    aset = NULL;
+    vset = NULL;
+
+    for (i = 0; i < ts->nprogs; i++) {
+        prog = &ts->progs[i];
+
+        for (j = 0; j < prog->nes; j++) {
+            es = &prog->es[j];
+
+            switch (es->type) {
+            case NGX_TS_VIDEO_MPEG1:
+            case NGX_TS_VIDEO_MPEG2:
+            case NGX_TS_VIDEO_MPEG4:
+            case NGX_TS_VIDEO_AVC:
+                if (vset == NULL) {
+                    vset = &dash->sets[dash->nsets++];
+                }
+
+                set = vset;
+                break;
+
+            case NGX_TS_AUDIO_MPEG1:
+            case NGX_TS_AUDIO_MPEG2:
+            case NGX_TS_AUDIO_AAC:
+                if (aset == NULL) {
+                    aset = &dash->sets[dash->nsets++];
+                }
+
+                set = aset;
+                break;
+
+            default:
+                continue;
+            }
+
+            if (set->reps == NULL) {
+                set->nreps = 0;
+                set->reps = ngx_pcalloc(ts->pool,
+                                        n * sizeof(ngx_ts_dash_rep_t));
+                if (set->reps == NULL) {
+                    return NGX_ERROR;
+                }
+            }
+
+            rep = &set->reps[set->nreps++];
+
+            rep->es = es;
+
+            rep->nsegs = dash->conf->nsegs;
+            rep->segs = ngx_pcalloc(ts->pool,
+                                    rep->nsegs * sizeof(ngx_ts_dash_segment_t));
+            if (rep->segs == NULL) {
+                return NGX_ERROR;
+            }
+
+            len = dash->path.len + 1 + NGX_INT_T_LEN + 1 + NGX_INT_T_LEN
+                  + sizeof(".mp4");
+
+            rep->path.data = ngx_pnalloc(ts->pool, len);
+            if (rep->path.data == NULL) {
+                return NGX_ERROR;
+            }
+
+            rep->path.len = ngx_sprintf(rep->path.data, "%V/%ui.",
+                                        &dash->path, (ngx_uint_t) es->pid)
+                            - rep->path.data;
+        }
+    }
+
+    return NGX_OK;
 }
 
 
@@ -178,7 +228,7 @@ found:
         rc = ngx_ts_dash_copy_avc(dash, rep, bufs);
         break;
 
-    case NGX_TS_AUDIO_AAC_ADTS:
+    case NGX_TS_AUDIO_AAC:
         rc = ngx_ts_dash_copy_aac(dash, rep, bufs);
         break;
 
@@ -449,21 +499,25 @@ ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash)
         out = dash->free;
         dash->free = out->next;
         out->next = NULL;
-        return out;
+        b = out->buf;
+
+    } else {
+        out = ngx_alloc_chain_link(dash->ts->pool);
+        if (out == NULL) {
+            return NULL;
+        }
+
+        b = ngx_create_temp_buf(dash->ts->pool, NGX_TS_DASH_BUFFER_SIZE);
+        if (b == NULL) {
+            return NULL;
+        }
+
+        out->buf = b;
+        out->next = NULL;
     }
 
-    out = ngx_alloc_chain_link(dash->ts->pool);
-    if (out == NULL) {
-        return NULL;
-    }
-
-    b = ngx_create_temp_buf(dash->ts->pool, NGX_TS_DASH_BUFFER_SIZE);
-    if (b == NULL) {
-        return NULL;
-    }
-
-    out->buf = b;
-    out->next = NULL;
+    b->pos = b->start;
+    b->last = b->start;
 
     return out;
 }
@@ -507,6 +561,8 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     file.name.len = ngx_sprintf(path->data + path->len, "%ui.mp4%Z", rep->seg)
                     - path->data - 1;
 
+    file.log = ts->log;
+
     for (try = 0; /* void */; try++) {
         file.fd = ngx_open_file(path->data,
                                 NGX_FILE_WRONLY,
@@ -526,12 +582,13 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
         }
 
         /* XXX dir access mode */
-        if (ngx_create_dir(dash->path, 0700) == NGX_FILE_ERROR) {
+        if (ngx_create_dir(dash->path.data, 0700) == NGX_FILE_ERROR) {
             err = ngx_errno;
 
             if (err != NGX_EEXIST) {
                 ngx_log_error(NGX_LOG_CRIT, ts->log, err,
-                              ngx_create_dir_n " \"%s\" failed", dash->path);
+                              ngx_create_dir_n " \"%s\" failed",
+                              dash->path.data);
                 return NGX_ERROR;
             }
         }
@@ -688,8 +745,7 @@ ngx_ts_dash_full_box(u_char *p, const char type[4], u_char version,
      * 4.2 Object Structure, p. 4
      */
 
-    /* size */
-    p += 4;
+    p = ngx_ts_dash_box(p, type);
 
     /* version */
     *p++ = version;
@@ -698,9 +754,6 @@ ngx_ts_dash_full_box(u_char *p, const char type[4], u_char version,
     *p++ = (u_char) (flags >> 16);
     *p++ = (u_char) (flags >> 8);
     *p++ = (u_char) flags;
-
-    /* type */
-    p = ngx_cpymem(p, type, 4);
 
     return p;
 }

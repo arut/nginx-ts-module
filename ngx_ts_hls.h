@@ -53,7 +53,7 @@ typedef struct {
 
     u_char                *m3u8_path;
     u_char                *m3u8_tmp_path;
-    u_char                *path;
+    ngx_str_t              path;
 
     ngx_ts_hls_variant_t  *vars;
     ngx_uint_t             nvars;
