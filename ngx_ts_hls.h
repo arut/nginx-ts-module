@@ -66,7 +66,7 @@ ngx_ts_hls_t *ngx_ts_hls_create(ngx_ts_hls_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name);
 ngx_int_t ngx_ts_hls_write_frame(ngx_ts_hls_t *hls, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *bufs);
-ngx_msec_t ngx_ts_hls_file_manager(void *data);
+char *ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 
 #endif /* _NGX_TS_HLS_H_INCLUDED_ */

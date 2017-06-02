@@ -21,6 +21,7 @@ static ngx_int_t ngx_ts_hls_write_file(u_char *path, u_char *tmp_path,
 static ngx_int_t ngx_ts_hls_open_segment(ngx_ts_hls_t *hls,
     ngx_ts_hls_variant_t *var);
 
+static ngx_msec_t ngx_ts_hls_file_manager(void *data);
 static ngx_int_t ngx_ts_hls_manage_file(ngx_tree_ctx_t *ctx, ngx_str_t *path);
 static ngx_int_t ngx_ts_hls_manage_directory(ngx_tree_ctx_t *ctx,
     ngx_str_t *path);
@@ -654,7 +655,7 @@ ngx_ts_hls_open_segment(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var)
 }
 
 
-ngx_msec_t
+static ngx_msec_t
 ngx_ts_hls_file_manager(void *data)
 {
     ngx_ts_hls_conf_t *hls = data;
@@ -755,4 +756,120 @@ ngx_ts_hls_delete_file(ngx_tree_ctx_t *ctx, ngx_str_t *path)
     }
 
     return NGX_OK;
+}
+
+
+char *
+ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    char  *p = conf;
+
+    ngx_str_t          *value, s;
+    ngx_int_t           v;
+    ngx_uint_t          i, nsegs;
+    ngx_msec_t          min_seg, max_seg;
+    ngx_ts_hls_conf_t  *hls, **field;
+
+    field = (ngx_ts_hls_conf_t **) (p + cmd->offset);
+
+    if (*field != NGX_CONF_UNSET_PTR) {
+        return "is duplicate";
+    }
+
+    hls = ngx_pcalloc(cf->pool, sizeof(ngx_ts_hls_conf_t));
+    if (hls == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    hls->path = ngx_pcalloc(cf->pool, sizeof(ngx_path_t));
+    if (hls->path == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    value = cf->args->elts;
+
+    hls->path->name = value[1];
+
+    if (hls->path->name.data[hls->path->name.len - 1] == '/') {
+        hls->path->name.len--;
+    }
+
+    if (ngx_conf_full_name(cf->cycle, &hls->path->name, 0) != NGX_OK) {
+        return NGX_CONF_ERROR;
+    }
+
+    min_seg = 5000;
+    max_seg = 0;
+    nsegs = 6;
+
+    for (i = 2; i < cf->args->nelts; i++) {
+
+        if (ngx_strncmp(value[i].data, "segment=", 7) == 0) {
+
+            s.len = value[i].len - 8;
+            s.data = value[i].data + 8;
+
+            min_seg = ngx_parse_time(&s, 0);
+            if (min_seg == (ngx_msec_t) NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid segment duration value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
+        if (ngx_strncmp(value[i].data, "max_segment=", 7) == 0) {
+
+            s.len = value[i].len - 12;
+            s.data = value[i].data + 12;
+
+            max_seg = ngx_parse_time(&s, 0);
+            if (max_seg == (ngx_msec_t) NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid max segment duration value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
+        if (ngx_strncmp(value[i].data, "segments=", 7) == 0) {
+
+            v = ngx_atoi(value[i].data + 9, value[i].len - 9);
+            if (v == NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid segments number value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            nsegs = v;
+
+            continue;
+        }
+
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "invalid parameter \"%V\"", &value[i]);
+        return NGX_CONF_ERROR;
+    }
+
+    hls->min_seg = min_seg;
+    hls->max_seg = max_seg ? max_seg : min_seg * 3;
+    hls->nsegs = nsegs;
+
+    hls->path->manager = ngx_ts_hls_file_manager;
+    hls->path->data = hls;
+    hls->path->conf_file = cf->conf_file->file.name.data;
+    hls->path->line = cf->conf_file->line;
+
+    if (ngx_add_path(cf, &hls->path) != NGX_OK) {
+        return NGX_CONF_ERROR;
+    }
+
+    *field = hls;
+
+    return NGX_CONF_OK;
 }
