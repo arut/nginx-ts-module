@@ -21,20 +21,12 @@ typedef struct {
 
 typedef struct {
     ngx_ts_stream_t     *ts;
-    ngx_ts_hls_t        *hls;
-    ngx_ts_dash_t       *dash;
-    ngx_str_t            name;
 } ngx_http_ts_ctx_t;
 
 
 static ngx_int_t ngx_http_ts_handler(ngx_http_request_t *r);
 static void ngx_http_ts_init(ngx_http_request_t *r);
 static void ngx_http_ts_read_event_handler(ngx_http_request_t *r);
-static ngx_int_t ngx_http_ts_pat_handler(ngx_ts_stream_t *ts);
-static ngx_int_t ngx_http_ts_pmt_handler(ngx_ts_stream_t *ts,
-    ngx_ts_program_t *prog);
-static ngx_int_t ngx_http_ts_pes_handler(ngx_ts_stream_t *ts,
-    ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
 
 static char *ngx_http_ts(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static void *ngx_http_ts_create_conf(ngx_conf_t *cf);
@@ -102,9 +94,11 @@ ngx_module_t  ngx_http_ts_module = {
 static ngx_int_t
 ngx_http_ts_handler(ngx_http_request_t *r)
 {
-    ngx_int_t           rc;
-    ngx_uint_t          n;
-    ngx_http_ts_ctx_t  *ctx;
+    ngx_int_t                rc;
+    ngx_str_t                name;
+    ngx_uint_t               n;
+    ngx_http_ts_ctx_t       *ctx;
+    ngx_http_ts_loc_conf_t  *tlcf;
 
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_ts_ctx_t));
     if (ctx == NULL) {
@@ -119,21 +113,30 @@ ngx_http_ts_handler(ngx_http_request_t *r)
     ctx->ts->pool = r->pool;
     ctx->ts->log = r->connection->log;
 
-    ctx->ts->pat_handler = ngx_http_ts_pat_handler;
-    ctx->ts->pmt_handler = ngx_http_ts_pmt_handler;
-    ctx->ts->pes_handler = ngx_http_ts_pes_handler;
-    ctx->ts->data = r;
-
     for (n = 0; n < r->uri.len; n++) {
         if (r->uri.data[r->uri.len - 1 - n] == '/') {
             break;
         }
     }
 
-    ctx->name.data = &r->uri.data[r->uri.len - n];
-    ctx->name.len = n;
+    name.data = &r->uri.data[r->uri.len - n];
+    name.len = n;
 
-    /* XXX detect streams with the same ctx->name, add shared zone */
+    /* XXX detect streams with the same name, add shared zone */
+
+    tlcf = ngx_http_get_module_loc_conf(r, ngx_http_ts_module);
+
+    if (tlcf->hls) {
+        if (ngx_ts_hls_create(tlcf->hls, ctx->ts, &name) == NULL) {
+            return  NGX_ERROR;
+        }
+    }
+
+    if (tlcf->dash) {
+        if (ngx_ts_dash_create(tlcf->dash, ctx->ts, &name) == NULL) {
+            return NGX_ERROR;
+        }
+    }
 
     ngx_http_set_ctx(r, ctx, ngx_http_ts_module);
 
@@ -210,94 +213,6 @@ ngx_http_ts_read_event_handler(ngx_http_request_t *r)
 
         rb->bufs = NULL;
     }
-}
-
-
-static ngx_int_t
-ngx_http_ts_pat_handler(ngx_ts_stream_t *ts)
-{
-    ngx_http_request_t *r = ts->data;
-
-    ngx_http_ts_ctx_t       *ctx;
-    ngx_http_ts_loc_conf_t  *tlcf;
-
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http ts pat nprogs:%ui",  ts->nprogs);
-
-    tlcf = ngx_http_get_module_loc_conf(r, ngx_http_ts_module);
-
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
-
-    if (tlcf->hls) {
-        ctx->hls = ngx_ts_hls_create(tlcf->hls, ctx->ts, &ctx->name);
-        if (ctx->hls == NULL) {
-            return  NGX_ERROR;
-        }
-    }
-
-    if (tlcf->dash) {
-        ctx->dash = ngx_ts_dash_create(tlcf->dash, ctx->ts, &ctx->name);
-        if (ctx->dash == NULL) {
-            return NGX_ERROR;
-        }
-    }
-
-    return NGX_OK;
-}
-
-
-static ngx_int_t
-ngx_http_ts_pmt_handler(ngx_ts_stream_t *ts, ngx_ts_program_t *prog)
-{
-    ngx_http_request_t *r = ts->data;
-
-    ngx_http_ts_ctx_t  *ctx;
-
-    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http ts pmt pid:0x%04uxd, n:%ui, nes:%ui",
-                   (unsigned) prog->pid, (ngx_uint_t) prog->number, prog->nes);
-
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
-
-    if (ctx->dash) {
-        if (ngx_ts_dash_handle_pmt(ctx->dash, prog) != NGX_OK) {
-            return NGX_ERROR;
-        }
-    }
-
-    return NGX_OK;
-}
-
-
-static ngx_int_t
-ngx_http_ts_pes_handler(ngx_ts_stream_t *ts, ngx_ts_program_t *prog,
-    ngx_ts_es_t *es, ngx_chain_t *bufs)
-{
-    ngx_http_request_t *r = ts->data;
-
-    ngx_http_ts_ctx_t  *ctx;
-
-    ngx_log_debug5(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http ts pes pid:0x%04uxd, type:0x%02uxd, sid:0x%02uxd, "
-                   "pts:%uL, dts:%uL",
-                   (unsigned) es->pid, (unsigned) es->type, (unsigned) es->sid,
-                   es->pts, es->dts);
-
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ts_module);
-
-    if (ctx->hls) {
-        if (ngx_ts_hls_write_frame(ctx->hls, prog, es, bufs) != NGX_OK) {
-            return NGX_ERROR;
-        }
-    }
-
-    if (ctx->dash) {
-        if (ngx_ts_dash_write_frame(ctx->dash, prog, es, bufs) != NGX_OK) {
-            return NGX_ERROR;
-        }
-    }
-
-    return NGX_OK;
 }
 
 

@@ -13,6 +13,11 @@
 #define NGX_TS_DASH_BUFFER_SIZE  1024
 
 
+static void ngx_ts_dash_cleanup(void *data);
+static ngx_int_t ngx_ts_dash_handler(ngx_ts_handler_data_t *hd);
+static ngx_int_t ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash);
+static ngx_int_t ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash,
+    ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
 static ssize_t ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
     ngx_chain_t *bufs);
 static ssize_t ngx_ts_dash_copy_aac(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
@@ -53,7 +58,10 @@ ngx_ts_dash_t *
 ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name)
 {
-    ngx_ts_dash_t  *dash;
+    ngx_ts_dash_t       *dash;
+    ngx_pool_cleanup_t  *cln;
+
+    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash create");
 
     dash = ngx_pcalloc(ts->pool, sizeof(ngx_ts_dash_t));
     if (dash == NULL) {
@@ -71,12 +79,61 @@ ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
 
     ngx_sprintf(dash->path.data, "%V/%V%Z", &conf->path->name, name);
 
+    cln = ngx_pool_cleanup_add(ts->pool, 0);
+    if (cln == NULL) {
+        return NULL;
+    }
+
+    cln->handler = ngx_ts_dash_cleanup;
+    cln->data = dash;
+
+    if (ngx_ts_add_handler(ts, ngx_ts_dash_handler, dash) != NGX_OK) {
+        return NULL;
+    }
+
     return dash;
 }
 
 
-ngx_int_t
-ngx_ts_dash_handle_pmt(ngx_ts_dash_t *dash, ngx_ts_program_t *new_prog)
+static void
+ngx_ts_dash_cleanup(void *data)
+{
+    ngx_ts_dash_t *dash = data;
+
+    ngx_ts_stream_t  *ts;
+
+    ts = dash->ts;
+
+    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash cleanup");
+
+    /*XXX*/
+
+    (void) dash;
+    (void) ts;
+}
+
+
+static ngx_int_t
+ngx_ts_dash_handler(ngx_ts_handler_data_t *hd)
+{
+    ngx_ts_dash_t *dash = hd->data;
+
+    switch (hd->event) {
+
+    case NGX_TS_PMT:
+        return ngx_ts_dash_pmt_handler(dash);
+
+    case NGX_TS_PES:
+        return ngx_ts_dash_pes_handler(dash, hd->prog, hd->es, hd->bufs);
+
+    default:
+        return NGX_OK;
+    }
+}
+
+
+static ngx_int_t
+ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash)
 {
     size_t              len;
     ngx_uint_t          i, j, n;
@@ -86,7 +143,13 @@ ngx_ts_dash_handle_pmt(ngx_ts_dash_t *dash, ngx_ts_program_t *new_prog)
     ngx_ts_dash_rep_t  *rep;
     ngx_ts_dash_set_t  *set, *aset, *vset;
 
+    if (dash->sets) {
+        return NGX_OK;
+    }
+
     ts = dash->ts;
+
+    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash pmt");
 
     n = 0;
 
@@ -179,8 +242,8 @@ ngx_ts_dash_handle_pmt(ngx_ts_dash_t *dash, ngx_ts_program_t *new_prog)
 }
 
 
-ngx_int_t
-ngx_ts_dash_write_frame(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
+static ngx_int_t
+ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *bufs)
 {
     u_char             *p;
@@ -194,6 +257,9 @@ ngx_ts_dash_write_frame(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     ngx_ts_dash_rep_t  *rep;
 
     ts = dash->ts;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash pes pid:%ud",
+                   (unsigned) es->pid);
 
     for (i = 0; i < dash->nsets; i++) {
         set = &dash->sets[i];
@@ -213,9 +279,6 @@ ngx_ts_dash_write_frame(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     return NGX_OK;
 
 found:
-
-    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash frame pid:%ud",
-                   (unsigned) rep->es->pid);
 
     if (ngx_ts_dash_close_segment(dash, rep) != NGX_OK) {
         return NGX_ERROR;
@@ -608,6 +671,9 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     file.log = ts->log;
 
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                   "ts dash close segment \"%s\"", file.name.data);
+
     for (try = 0; /* void */; try++) {
         file.fd = ngx_open_file(path->data,
                                 NGX_FILE_WRONLY,
@@ -719,6 +785,9 @@ ngx_ts_dash_open_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     if (rep->meta) {
         return NGX_OK;
     }
+
+    ngx_log_debug2(NGX_LOG_DEBUG_CORE, dash->ts->log, 0,
+                   "ts dash open segment \"%V%ui.mp4\"", &rep->path, rep->seg);
 
     es = rep->es;
 

@@ -92,9 +92,6 @@ typedef struct {
 
 ngx_ts_dash_t *ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name);
-ngx_int_t ngx_ts_dash_handle_pmt(ngx_ts_dash_t *dash, ngx_ts_program_t *prog);
-ngx_int_t ngx_ts_dash_write_frame(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
-    ngx_ts_es_t *es, ngx_chain_t *bufs);
 char *ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 

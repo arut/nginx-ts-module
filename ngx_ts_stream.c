@@ -30,6 +30,8 @@ typedef struct {
 } ngx_ts_header_t;
 
 
+static ngx_int_t ngx_ts_run_handlers(ngx_ts_event_e event, ngx_ts_stream_t *ts,
+    ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
 static void ngx_ts_byte_read_init(ngx_ts_byte_read_t *br, ngx_chain_t *cl);
 static ngx_int_t ngx_ts_byte_read(ngx_ts_byte_read_t *br, u_char *dst,
     size_t len);
@@ -121,6 +123,51 @@ static uint32_t  ngx_ts_crc32_table_ieee[] = {
     0xb110b0af, 0x060d71ab, 0xdf2b32a6, 0x6836f3a2,
     0x6d66b4bc, 0xda7b75b8, 0x035d36b5, 0xb440f7b1
 };
+
+
+ngx_int_t
+ngx_ts_add_handler(ngx_ts_stream_t *ts, ngx_ts_handler_pt handler, void *data)
+{
+    ngx_ts_handler_t  *h;
+
+    h = ngx_palloc(ts->pool, sizeof(ngx_ts_handler_t));
+    if (h == NULL) {
+        return NGX_ERROR;
+    }
+
+    h->handler = handler;
+    h->data = data;
+
+    h->next = ts->handlers;
+    ts->handlers = h;
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_ts_run_handlers(ngx_ts_event_e event, ngx_ts_stream_t *ts,
+    ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs)
+{
+    ngx_ts_handler_t       *h;
+    ngx_ts_handler_data_t   hd;
+
+    hd.event = event;
+    hd.ts = ts;
+    hd.prog = prog;
+    hd.es = es;
+    hd.bufs = bufs;
+
+    for (h = ts->handlers; h; h = h->next) {
+        hd.data = h->data;
+
+        if (h->handler(&hd) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
+
+    return NGX_OK;
+}
 
 
 static void
@@ -497,10 +544,8 @@ ngx_ts_read_pat(ngx_ts_stream_t *ts, ngx_ts_header_t *h, ngx_buf_t *b)
 
     ts->nprogs = prog - ts->progs;
 
-    if (ts->pat_handler) {
-        if (ts->pat_handler(ts) != NGX_OK) {
-            return NGX_ERROR;
-        }
+    if (ngx_ts_run_handlers(NGX_TS_PAT, ts, NULL, NULL, NULL) != NGX_OK) {
+        return NGX_ERROR;
     }
 
     ngx_ts_free_chain(ts, &ts->bufs);
@@ -652,10 +697,8 @@ ngx_ts_read_pmt(ngx_ts_stream_t *ts, ngx_ts_program_t *prog, ngx_ts_header_t *h,
                        (ngx_uint_t) type, es->video, (unsigned) pid);
     }
 
-    if (ts->pmt_handler) {
-        if (ts->pmt_handler(ts, prog) != NGX_OK) {
-            return NGX_ERROR;
-        }
+    if (ngx_ts_run_handlers(NGX_TS_PMT, ts, prog, NULL, NULL) != NGX_OK) {
+        return NGX_ERROR;
     }
 
     ngx_ts_free_chain(ts, &prog->bufs);
@@ -880,10 +923,8 @@ ngx_ts_read_pes(ngx_ts_stream_t *ts, ngx_ts_program_t *prog, ngx_ts_es_t *es,
 
     es->ptsf = ptsf;
 
-    if (ts->pes_handler) {
-        if (ts->pes_handler(ts, prog, es, br.cl) != NGX_OK) {
-            return NGX_ERROR;
-        }
+    if (ngx_ts_run_handlers(NGX_TS_PES, ts, prog, es, br.cl) != NGX_OK) {
+        return NGX_ERROR;
     }
 
     ngx_ts_free_chain(ts, &es->bufs);

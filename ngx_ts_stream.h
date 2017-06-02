@@ -30,6 +30,13 @@
 #define NGX_TS_AUDIO_AAC       0x0f /* ISO/IEC 13818-7, MPEG-2 AAC ADTS Audio */
 
 
+typedef enum {
+    NGX_TS_PAT = 0,
+    NGX_TS_PMT,
+    NGX_TS_PES
+} ngx_ts_event_e;
+
+
 typedef struct {
     u_char                        type;
     u_char                        sid;
@@ -40,7 +47,7 @@ typedef struct {
     unsigned                      ptsf:1;
     unsigned                      rand:1;
     unsigned                      video:1;
-    ngx_chain_t                  *bufs; /* ES */
+    ngx_chain_t                  *bufs;  /* ES */
 } ngx_ts_es_t;
 
 
@@ -52,37 +59,48 @@ typedef struct {
     ngx_uint_t                    video;  /* unisgned  video:1; */
     ngx_uint_t                    nes;
     ngx_ts_es_t                  *es;
-    ngx_chain_t                  *bufs; /* PMT */
+    ngx_chain_t                  *bufs;  /* PMT */
 } ngx_ts_program_t;
 
 
-typedef struct ngx_ts_stream_s  ngx_ts_stream_t;
+typedef struct ngx_ts_handler_s  ngx_ts_handler_t;
 
 
-typedef ngx_int_t (*ngx_ts_pat_handler_pt)(ngx_ts_stream_t *ts);
-typedef ngx_int_t (*ngx_ts_pmt_handler_pt)(ngx_ts_stream_t *ts,
-    ngx_ts_program_t *prog);
-typedef ngx_int_t (*ngx_ts_pes_handler_pt)(ngx_ts_stream_t *ts,
-    ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
-
-
-struct ngx_ts_stream_s {
+typedef struct {
     ngx_uint_t                    nprogs;
     ngx_ts_program_t             *progs;
     ngx_log_t                    *log;
     ngx_pool_t                   *pool;
     ngx_buf_t                    *buf;
     ngx_chain_t                  *free;
-    ngx_chain_t                  *bufs; /* PAT */
-
-    ngx_ts_pat_handler_pt         pat_handler;
-    ngx_ts_pmt_handler_pt         pmt_handler;
-    ngx_ts_pes_handler_pt         pes_handler;
-
+    ngx_chain_t                  *bufs;  /* PAT */
+    ngx_ts_handler_t             *handlers;
     void                         *data;
+} ngx_ts_stream_t;
+
+
+typedef struct {
+    ngx_ts_event_e                event;
+    ngx_ts_stream_t              *ts;
+    ngx_ts_program_t             *prog;
+    ngx_ts_es_t                  *es;
+    ngx_chain_t                  *bufs;
+    void                         *data;
+} ngx_ts_handler_data_t;
+
+
+typedef ngx_int_t (*ngx_ts_handler_pt)(ngx_ts_handler_data_t *hd);
+
+
+struct ngx_ts_handler_s {
+    ngx_ts_handler_pt             handler;
+    void                         *data;
+    ngx_ts_handler_t             *next;
 };
 
 
+ngx_int_t ngx_ts_add_handler(ngx_ts_stream_t *ts, ngx_ts_handler_pt handler,
+    void *data);
 ngx_int_t ngx_ts_read(ngx_ts_stream_t *ts, ngx_chain_t *in);
 ngx_chain_t *ngx_ts_write_pat(ngx_ts_stream_t *ts, ngx_ts_program_t *prog);
 ngx_chain_t *ngx_ts_write_pmt(ngx_ts_stream_t *ts, ngx_ts_program_t *prog);
