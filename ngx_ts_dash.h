@@ -54,6 +54,7 @@ typedef struct {
 
     ngx_chain_t            *sps;
     ngx_chain_t            *pps;
+    u_char                 *adts;
 
     ngx_ts_es_t            *es;
     ngx_str_t               path;
