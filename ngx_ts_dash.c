@@ -837,7 +837,8 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
     ssize_t                 n;
     ngx_fd_t                fd;
     ngx_err_t               err;
-    ngx_uint_t              i, j, k, pid, bandwidth, min_update, min_buftime;
+    ngx_uint_t              i, j, k, pid, bandwidth, min_update, min_buftime,
+                            buf_depth;
     ngx_ts_stream_t        *ts;
     ngx_ts_dash_set_t      *set;
     ngx_ts_dash_rep_t      *rep;
@@ -862,6 +863,7 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
 
     min_update = dash->conf->min_seg / 1000; /* TODO */
     min_buftime = dash->conf->min_seg / 1000; /* TODO */
+    buf_depth = dash->conf->max_seg * dash->conf->nsegs / 1000;
 
     for ( ;; ) {
         ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
@@ -878,18 +880,21 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
         p = ngx_slprintf(p, last,
                 "<?xml version=\"1.0\"?>\n"
                 "<MPD\n"
-                "    xmlns=\"urn:mpeg:dash:schema:mpd:2011\"\n"
-                "    profiles=\"urn:mpeg:dash:profile:isoff-live:2011\"\n"
+                "    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+                "    xmlns=\"urn:mpeg:DASH:schema:MPD:2011\"\n"
+                "    xsi:schemaLocation=\"urn:mpeg:DASH:schema:MPD:2011 "
+                                                             "DASH-MPD.xsd\"\n"
                 "    type=\"dynamic\"\n"
                 "    availabilityStartTime=\"%s\"\n"
                 "    publishTime=\"%s\"\n"
                 "    minimumUpdatePeriod=\"PT%uiS\"\n"
                 "    minBufferTime=\"PT%uiS\"\n"
-                "    timeShiftBufferDepth=\"PT0S\">\n"
+                "    timeShiftBufferDepth=\"PT%uiS\"\n"
+                "    profiles=\"urn:mpeg:dash:profile:isoff-live:2011\">\n"
                 "  <Period\n"
                 "      id=\"0\"\n"
                 "      start=\"PT0S\">\n",
-                avail_start_time, pub_time, min_update, min_buftime);
+                avail_start_time, pub_time, min_update, min_buftime, buf_depth);
 
         for (i = 0; i < dash->nsets; i++) {
             set = &dash->sets[i];
@@ -922,10 +927,11 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
                         "          bandwidth=\"%ui\">\n"
                         "        <SegmentTemplate\n"
                         "            timescale=\"90000\"\n"
-                        "            media=\"%ui.$Time$.mp4\"\n"
-                        "            initialization=\"%ui.init.mp4\">\n"
+                        "            media=\"$RepresentationID$.$Time$.mp4\"\n"
+                        "            initialization="
+                                           "\"$RepresentationID$.init.mp4\">\n"
                         "          <SegmentTimeline>\n",
-                        pid, codec, bandwidth, pid, pid);
+                        pid, codec, bandwidth);
 
                 for (k = 0; k < rep->nsegs; k++) {
                     seg = &rep->segs[(rep->seg + k) % rep->nsegs];
@@ -1037,7 +1043,7 @@ ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
 
     switch (rep->es->type) {
     case NGX_TS_VIDEO_MPEG1:
-        ngx_sprintf(p, "mp4v.6a%Z");
+        ngx_sprintf(p, "mp4v.6A%Z");
         break;
 
     case NGX_TS_VIDEO_MPEG2:
@@ -1062,12 +1068,12 @@ ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
             }
         }
 
-        ngx_sprintf(p, "avc1.%02uxi%02uxi%02uxi%Z",
+        ngx_sprintf(p, "avc1.%02uXi%02uXi%02uXi%Z",
                     profile, constraints, level);
         break;
 
     case NGX_TS_AUDIO_MPEG1:
-        ngx_sprintf(p, "mp4a.6b%Z");
+        ngx_sprintf(p, "mp4a.6B%Z");
         break;
 
     case NGX_TS_AUDIO_MPEG2:
