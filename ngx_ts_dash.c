@@ -10,7 +10,10 @@
 #include "ngx_ts_dash.h"
 
 
-#define NGX_TS_DASH_BUFFER_SIZE  1024
+#define NGX_TS_DASH_BUFFER_SIZE   1024
+
+#define NGX_TS_DASH_DATETIME_LEN  sizeof("2000-12-31T23:59:59")
+#define NGX_TS_DASH_CODEC_LEN     sizeof("avc1.PPPCCCLLL")
 
 
 static void ngx_ts_dash_cleanup(void *data);
@@ -28,6 +31,9 @@ static ngx_chain_t* ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash);
 static ngx_int_t ngx_ts_dash_close_segment(ngx_ts_dash_t *dash,
     ngx_ts_dash_rep_t *rep);
 static void ngx_ts_dash_fill_subs(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep);
+static ngx_int_t ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash);
+static void ngx_ts_dash_format_datetime(u_char *p, time_t t);
+static void ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep);
 static ngx_int_t ngx_ts_dash_open_segment(ngx_ts_dash_t *dash,
     ngx_ts_dash_rep_t *rep);
 
@@ -58,6 +64,7 @@ ngx_ts_dash_t *
 ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name)
 {
+    size_t               len;
     ngx_ts_dash_t       *dash;
     ngx_pool_cleanup_t  *cln;
 
@@ -70,6 +77,7 @@ ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
 
     dash->conf = conf;
     dash->ts = ts;
+    dash->playlist_len = 128;
 
     dash->path.len = conf->path->name.len + 1 + name->len;
     dash->path.data = ngx_pnalloc(ts->pool, dash->path.len + 1);
@@ -78,6 +86,28 @@ ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     }
 
     ngx_sprintf(dash->path.data, "%V/%V%Z", &conf->path->name, name);
+
+    /* index.mpd */
+
+    len = dash->path.len + sizeof("/index.mpd");
+
+    dash->mpd_path = ngx_pnalloc(ts->pool, len);
+    if (dash->mpd_path == NULL) {
+        return NULL;
+    }
+
+    ngx_sprintf(dash->mpd_path, "%V/index.mpd%Z", &dash->path);
+
+    /* index.mpd.tmp */
+
+    len += sizeof(".tmp") - 1;
+
+    dash->mpd_tmp_path = ngx_pnalloc(ts->pool, len);
+    if (dash->mpd_tmp_path == NULL) {
+        return NULL;
+    }
+
+    ngx_sprintf(dash->mpd_tmp_path, "%s.tmp%Z", dash->mpd_path);
 
     cln = ngx_pool_cleanup_add(ts->pool, 0);
     if (cln == NULL) {
@@ -185,6 +215,7 @@ ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash)
             case NGX_TS_VIDEO_AVC:
                 if (vset == NULL) {
                     vset = &dash->sets[dash->nsets++];
+                    vset->video = 1;
                 }
 
                 set = vset;
@@ -224,7 +255,7 @@ ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash)
                 return NGX_ERROR;
             }
 
-            len = dash->path.len + 1 + NGX_INT_T_LEN + 1 + NGX_INT_T_LEN
+            len = dash->path.len + 1 + NGX_INT_T_LEN + 1 + NGX_INT64_LEN
                   + sizeof(".mp4");
 
             rep->path.data = ngx_pnalloc(ts->pool, len);
@@ -249,6 +280,7 @@ ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     u_char             *p;
     size_t              size, n;
     ssize_t             rc;
+    int64_t             d, analyze;
     ngx_buf_t          *b;
     ngx_uint_t          i, j;
     ngx_chain_t        *cl;
@@ -354,6 +386,21 @@ found:
     }
 
     rep->pts = es->pts;
+
+    if (rep->bandwidth == 0) {
+        if (rep->bandwidth_bytes == 0) {
+            rep->bandwidth_pts = es->pts;
+        }
+
+        rep->bandwidth_bytes += size;
+
+        d = es->pts - rep->bandwidth_pts;
+        analyze = (int64_t) dash->conf->analyze * 90;
+
+        if (d >= analyze) {
+            rep->bandwidth = rep->bandwidth_bytes * 8 * 90000 / d;
+        }
+    }
 
     return NGX_OK;
 }
@@ -666,7 +713,8 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     ngx_memzero(&file, sizeof(ngx_file_t));
 
     file.name.data = path->data;
-    file.name.len = ngx_sprintf(path->data + path->len, "%ui.mp4%Z", rep->seg)
+    file.name.len = ngx_sprintf(path->data + path->len, "%uL.mp4%Z",
+                                rep->seg_pts)
                     - path->data - 1;
 
     file.log = ts->log;
@@ -736,6 +784,10 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     seg->start = rep->seg_pts;
     seg->duration = d;
 
+    if (ngx_ts_dash_update_playlist(dash) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
     return NGX_OK;
 }
 
@@ -773,6 +825,264 @@ ngx_ts_dash_fill_subs(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     ngx_ts_dash_write32(subs->moof_mdat, moof + mdat);
     ngx_ts_dash_write32(subs->moof_data, moof + 8);
+}
+
+
+static ngx_int_t
+ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
+{
+    u_char                 *p, *last, *data;
+    time_t                  now;
+    size_t                  len;
+    ssize_t                 n;
+    ngx_fd_t                fd;
+    ngx_err_t               err;
+    ngx_uint_t              i, j, k, pid, bandwidth, min_update, min_buftime;
+    ngx_ts_stream_t        *ts;
+    ngx_ts_dash_set_t      *set;
+    ngx_ts_dash_rep_t      *rep;
+    ngx_ts_dash_segment_t  *seg;
+    u_char                  codec[NGX_TS_DASH_CODEC_LEN];
+    u_char                  avail_start_time[NGX_TS_DASH_DATETIME_LEN];
+    u_char                  pub_time[NGX_TS_DASH_DATETIME_LEN];
+
+    ts = dash->ts;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                   "ts dash update playlist \"%s\"", dash->mpd_path);
+
+    now = ngx_time();
+
+    if (dash->availability_start == 0) {
+        dash->availability_start = now;
+    }
+
+    ngx_ts_dash_format_datetime(avail_start_time, dash->availability_start);
+    ngx_ts_dash_format_datetime(pub_time, now);
+
+    min_update = dash->conf->min_seg / 1000; /* TODO */
+    min_buftime = dash->conf->min_seg / 1000; /* TODO */
+
+    for ( ;; ) {
+        ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                       "ts dash playlist len:%uz", dash->playlist_len);
+
+        data = ngx_alloc(dash->playlist_len, ts->log);
+        if (data == NULL) {
+            return NGX_ERROR;
+        }
+
+        p = data;
+        last = data + dash->playlist_len;
+
+        p = ngx_slprintf(p, last,
+                "<?xml version=\"1.0\"?>\n"
+                "<MPD\n"
+                "    xmlns=\"urn:mpeg:dash:schema:mpd:2011\"\n"
+                "    profiles=\"urn:mpeg:dash:profile:isoff-live:2011\"\n"
+                "    type=\"dynamic\"\n"
+                "    availabilityStartTime=\"%s\"\n"
+                "    publishTime=\"%s\"\n"
+                "    minimumUpdatePeriod=\"PT%uiS\"\n"
+                "    minBufferTime=\"PT%uiS\"\n"
+                "    timeShiftBufferDepth=\"PT0S\">\n"
+                "  <Period\n"
+                "      id=\"0\"\n"
+                "      start=\"PT0S\">\n",
+                avail_start_time, pub_time, min_update, min_buftime);
+
+        for (i = 0; i < dash->nsets; i++) {
+            set = &dash->sets[i];
+
+            p = ngx_slprintf(p, last,
+                    "    <AdaptationSet\n"
+                    "        segmentAlignment=\"true\"\n"
+                    "        mimeType=\"%s/mp4\">\n",
+                    set->video ? "video" : "audio");
+
+            for (j = 0; j < set->nreps; j++) {
+                rep = &set->reps[j];
+
+                if (rep->bandwidth == 0) {
+                    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                                   "ts dash bandwidth not available");
+                    ngx_free(data);
+                    return NGX_OK;
+                }
+
+                pid = rep->es->pid;
+                bandwidth = rep->bandwidth;
+
+                ngx_ts_dash_format_codec(codec, rep);
+
+                p = ngx_slprintf(p, last,
+                        "      <Representation\n"
+                        "          id=\"%ui\"\n"
+                        "          codecs=\"%s\"\n"
+                        "          bandwidth=\"%ui\">\n"
+                        "        <SegmentTemplate\n"
+                        "            timescale=\"90000\"\n"
+                        "            media=\"%ui.$Time$.mp4\"\n"
+                        "            initialization=\"%ui.init.mp4\">\n"
+                        "          <SegmentTimeline>\n",
+                        pid, codec, bandwidth, pid, pid);
+
+                for (k = 0; k < rep->nsegs; k++) {
+                    seg = &rep->segs[(rep->seg + k) % rep->nsegs];
+
+                    if (seg->duration) {
+                        p = ngx_slprintf(p, last,
+                                "            <S t=\"%uL\" d=\"%uL\"/>\n",
+                                seg->start, seg->duration);
+                    }
+                }
+
+                p = ngx_slprintf(p, last,
+                        "          </SegmentTimeline>\n"
+                        "        </SegmentTemplate>\n"
+                        "      </Representation>\n");
+            }
+
+            p = ngx_slprintf(p, last,
+                    "    </AdaptationSet>\n");
+        }
+
+        p = ngx_slprintf(p, last,
+                "  </Period>\n"
+                "</MPD>\n");
+
+        if (p != last) {
+            break;
+        }
+
+        ngx_free(data);
+
+        dash->playlist_len *= 2;
+    }
+
+    len = p - data;
+
+    fd = ngx_open_file(dash->mpd_tmp_path,
+                       NGX_FILE_WRONLY,
+                       NGX_FILE_TRUNCATE,
+                       NGX_FILE_DEFAULT_ACCESS);
+
+    if (fd == NGX_INVALID_FILE) {
+        ngx_log_error(NGX_LOG_EMERG, ts->log, ngx_errno,
+                      ngx_open_file_n " \"%s\" failed", dash->mpd_tmp_path);
+        goto failed;
+    }
+
+    n = ngx_write_fd(fd, data, len);
+
+    err = errno;
+
+    if (ngx_close_file(fd) == NGX_FILE_ERROR) {
+        ngx_log_error(NGX_LOG_ALERT, ts->log, ngx_errno,
+                      ngx_close_file_n " \"%s\" failed", dash->mpd_tmp_path);
+        goto failed;
+    }
+
+    if (n < 0) {
+        ngx_log_error(NGX_LOG_ALERT, ts->log, err,
+                      ngx_write_fd_n " to \"%s\" failed", dash->mpd_tmp_path);
+        goto failed;
+    }
+
+    if ((size_t) n != len) {
+        ngx_log_error(NGX_LOG_ALERT, ts->log, 0,
+                      "incomplete write to \"%s\"", dash->mpd_tmp_path);
+        goto failed;
+    }
+
+    if (ngx_rename_file(dash->mpd_tmp_path, dash->mpd_path) == NGX_FILE_ERROR) {
+        ngx_log_error(NGX_LOG_ALERT, ts->log, ngx_errno,
+                      ngx_rename_file_n " \"%s\" to \"%s\" failed",
+                      dash->mpd_tmp_path, dash->mpd_path);
+        goto failed;
+    }
+
+    ngx_free(data);
+
+    return NGX_OK;
+
+failed:
+
+    ngx_free(data);
+
+    return NGX_ERROR;
+}
+
+
+static void
+ngx_ts_dash_format_datetime(u_char *p, time_t t)
+{
+    struct tm  tm;
+
+    ngx_libc_gmtime(t, &tm);
+
+    if (strftime((char *) p, NGX_TS_DASH_DATETIME_LEN, "%Y-%m-%dT%H:%M:%S", &tm)
+        == 0)
+    {
+        *p = 0;
+    }
+}
+
+
+static void
+ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
+{
+    ngx_buf_t   *b;
+    ngx_uint_t   profile, constraints, level;
+
+    switch (rep->es->type) {
+    case NGX_TS_VIDEO_MPEG1:
+        ngx_sprintf(p, "mp4v.6a%Z");
+        break;
+
+    case NGX_TS_VIDEO_MPEG2:
+        ngx_sprintf(p, "mp4v.61%Z");
+        break;
+
+    case NGX_TS_VIDEO_MPEG4:
+        ngx_sprintf(p, "mp4v.20%Z");
+        break;
+
+     case NGX_TS_VIDEO_AVC:
+        profile = 0;
+        constraints = 0;
+        level = 0;
+
+        if (rep->sps) {
+            b = rep->sps->buf;
+            if (b->last - b->pos > 3) {
+                profile = b->pos[1];
+                constraints = b->pos[2];
+                level = b->pos[3];
+            }
+        }
+
+        ngx_sprintf(p, "avc1.%02uxi%02uxi%02uxi%Z",
+                    profile, constraints, level);
+        break;
+
+    case NGX_TS_AUDIO_MPEG1:
+        ngx_sprintf(p, "mp4a.6b%Z");
+        break;
+
+    case NGX_TS_AUDIO_MPEG2:
+        ngx_sprintf(p, "mp4a.69%Z");
+        break;
+
+    case NGX_TS_AUDIO_AAC:
+        profile = rep->adts ? 1 + (rep->adts[2] >> 6) : 0;
+        ngx_sprintf(p, "mp4a.40.%ui%Z", profile);
+        break;
+
+    default:
+        /* should never reach this */
+        *p = 0;
+    }
 }
 
 
@@ -1207,7 +1517,7 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_str_t           *value, s;
     ngx_int_t            v;
     ngx_uint_t           i, nsegs;
-    ngx_msec_t           min_seg, max_seg;
+    ngx_msec_t           min_seg, max_seg, analyze;
     ngx_ts_dash_conf_t  *dash, **field;
 
     field = (ngx_ts_dash_conf_t **) (p + cmd->offset);
@@ -1240,11 +1550,12 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     min_seg = 5000;
     max_seg = 0;
+    analyze = 0;
     nsegs = 6;
 
     for (i = 2; i < cf->args->nelts; i++) {
 
-        if (ngx_strncmp(value[i].data, "segment=", 7) == 0) {
+        if (ngx_strncmp(value[i].data, "segment=", 8) == 0) {
 
             s.len = value[i].len - 8;
             s.data = value[i].data + 8;
@@ -1260,7 +1571,7 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
-        if (ngx_strncmp(value[i].data, "max_segment=", 7) == 0) {
+        if (ngx_strncmp(value[i].data, "max_segment=", 12) == 0) {
 
             s.len = value[i].len - 12;
             s.data = value[i].data + 12;
@@ -1269,6 +1580,22 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             if (max_seg == (ngx_msec_t) NGX_ERROR) {
                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                    "invalid max segment duration value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
+        if (ngx_strncmp(value[i].data, "analyze=", 8) == 0) {
+
+            s.len = value[i].len - 8;
+            s.data = value[i].data + 8;
+
+            analyze = ngx_parse_time(&s, 0);
+            if (analyze == (ngx_msec_t) NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid analyze duration value \"%V\"",
                                    &value[i]);
                 return NGX_CONF_ERROR;
             }
@@ -1298,6 +1625,7 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     dash->min_seg = min_seg;
     dash->max_seg = max_seg ? max_seg : min_seg * 3;
+    dash->analyze = analyze ? analyze : min_seg * 3;
     dash->nsegs = nsegs;
 
     dash->path->manager = ngx_ts_dash_file_manager;

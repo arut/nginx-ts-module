@@ -279,8 +279,9 @@ static ngx_int_t
 ngx_ts_hls_pes_handler(ngx_ts_hls_t *hls, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *bufs)
 {
+    int64_t                d, analyze;
     ngx_uint_t             n;
-    ngx_chain_t           *out;
+    ngx_chain_t           *out, *cl;
     ngx_ts_stream_t       *ts;
     ngx_ts_hls_variant_t  *var;
 
@@ -321,6 +322,23 @@ found:
         return NGX_ERROR;
     }
 
+    if (var->bandwidth == 0) {
+        if (var->bandwidth_bytes == 0) {
+            var->bandwidth_pts = es->pts;
+        }
+
+        for (cl = out; cl; cl = cl->next) {
+            var->bandwidth_bytes += cl->buf->last - cl->buf->pos;
+        }
+
+        d = es->pts - var->bandwidth_pts;
+        analyze = (int64_t) hls->conf->analyze * 90;
+
+        if (d >= analyze) {
+            var->bandwidth = var->bandwidth_bytes * 8 * 90000 / d;
+        }
+    }
+
     ngx_ts_free_chain(ts, &out);
 
     return NGX_OK;
@@ -330,7 +348,6 @@ found:
 static ngx_int_t
 ngx_ts_hls_close_segment(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var)
 {
-    off_t                  size;
     int64_t                d, min_seg, max_seg;
     ngx_uint_t             n;
     ngx_ts_es_t           *es;
@@ -387,20 +404,6 @@ close:
     seg->id = var->seg++;
     seg->duration = d;
     seg->size = var->file.offset;
-
-    /* TODO make configurable */
-    if (var->bandwidth == 0 && (var->seg == var->nsegs || var->seg == 3)) {
-        d = 0;
-        size = 0;
-
-        for (n = 0, d = 0, size = 0; n < var->nsegs && n < 3; n++) {
-            seg = &var->segs[n];
-            d += seg->duration;
-            size += seg->size;
-        }
-
-        var->bandwidth = size * 8 * 90000 / d;
-    }
 
     if (ngx_close_file(var->file.fd) == NGX_FILE_ERROR) {
         ngx_log_error(NGX_LOG_ALERT, ts->log, ngx_errno,
@@ -538,6 +541,8 @@ ngx_ts_hls_update_master_playlist(ngx_ts_hls_t *hls)
         var = &hls->vars[n];
 
         if (var->bandwidth == 0) {
+            ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                           "ts hls bandwidth not available");
             return NGX_OK;
         }
 
@@ -574,8 +579,9 @@ static ngx_int_t
 ngx_ts_hls_write_file(u_char *path, u_char *tmp_path, u_char *data, size_t len,
     ngx_log_t *log)
 {
-    ssize_t   n;
-    ngx_fd_t  fd;
+    ssize_t    n;
+    ngx_fd_t   fd;
+    ngx_err_t  err;
 
     fd = ngx_open_file(tmp_path,
                        NGX_FILE_WRONLY,
@@ -590,8 +596,16 @@ ngx_ts_hls_write_file(u_char *path, u_char *tmp_path, u_char *data, size_t len,
 
     n = ngx_write_fd(fd, data, len);
 
-    if (n < 0) {
+    err = ngx_errno;
+
+    if (ngx_close_file(fd) == NGX_FILE_ERROR) {
         ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
+                      ngx_close_file_n " \"%s\" failed", tmp_path);
+        return NGX_ERROR;
+    }
+
+    if (n < 0) {
+        ngx_log_error(NGX_LOG_ALERT, log, err,
                       ngx_write_fd_n " to \"%s\" failed", tmp_path);
         return NGX_ERROR;
     }
@@ -599,12 +613,6 @@ ngx_ts_hls_write_file(u_char *path, u_char *tmp_path, u_char *data, size_t len,
     if ((size_t) n != len) {
         ngx_log_error(NGX_LOG_ALERT, log, 0,
                       "incomplete write to \"%s\"", tmp_path);
-        return NGX_ERROR;
-    }
-
-    if (ngx_close_file(fd) == NGX_FILE_ERROR) {
-        ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
-                      ngx_close_file_n " \"%s\" failed", tmp_path);
         return NGX_ERROR;
     }
 
@@ -815,7 +823,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_str_t          *value, s;
     ngx_int_t           v;
     ngx_uint_t          i, nsegs;
-    ngx_msec_t          min_seg, max_seg;
+    ngx_msec_t          min_seg, max_seg, analyze;
     ngx_ts_hls_conf_t  *hls, **field;
 
     field = (ngx_ts_hls_conf_t **) (p + cmd->offset);
@@ -848,11 +856,12 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     min_seg = 5000;
     max_seg = 0;
+    analyze = 0;
     nsegs = 6;
 
     for (i = 2; i < cf->args->nelts; i++) {
 
-        if (ngx_strncmp(value[i].data, "segment=", 7) == 0) {
+        if (ngx_strncmp(value[i].data, "segment=", 8) == 0) {
 
             s.len = value[i].len - 8;
             s.data = value[i].data + 8;
@@ -868,7 +877,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
-        if (ngx_strncmp(value[i].data, "max_segment=", 7) == 0) {
+        if (ngx_strncmp(value[i].data, "max_segment=", 12) == 0) {
 
             s.len = value[i].len - 12;
             s.data = value[i].data + 12;
@@ -877,6 +886,22 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             if (max_seg == (ngx_msec_t) NGX_ERROR) {
                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                    "invalid max segment duration value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
+        if (ngx_strncmp(value[i].data, "analyze=", 8) == 0) {
+
+            s.len = value[i].len - 8;
+            s.data = value[i].data + 8;
+
+            analyze = ngx_parse_time(&s, 0);
+            if (analyze == (ngx_msec_t) NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid analyze duration value \"%V\"",
                                    &value[i]);
                 return NGX_CONF_ERROR;
             }
@@ -906,6 +931,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     hls->min_seg = min_seg;
     hls->max_seg = max_seg ? max_seg : min_seg * 3;
+    hls->analyze = analyze ? analyze : min_seg * 3;
     hls->nsegs = nsegs;
 
     hls->path->manager = ngx_ts_hls_file_manager;

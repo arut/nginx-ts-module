@@ -18,6 +18,7 @@ typedef struct {
     ngx_path_t            *path;
     ngx_msec_t             min_seg;
     ngx_msec_t             max_seg;
+    ngx_msec_t             analyze;
     ngx_uint_t             nsegs;
 } ngx_ts_hls_conf_t;
 
@@ -32,7 +33,10 @@ typedef struct {
 typedef struct {
     ngx_file_t             file;
     ngx_chain_t           *prologue;
+
     ngx_uint_t             bandwidth;
+    ngx_uint_t             bandwidth_bytes;
+    uint64_t               bandwidth_pts;
 
     ngx_ts_hls_segment_t  *segs;
     ngx_uint_t             nsegs;
