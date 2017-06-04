@@ -10,6 +10,7 @@ Features
 
 - receives MPEG-TS over HTTP
 - produces and manages Live HLS
+- produces and manages Live MPEG-DASH
 
 
 Compatibility
@@ -67,11 +68,30 @@ nginx.conf::
         }
     }
 
-index.html::
+HLS in HTML::
 
-    <video width="640" height="480" controls autoplay>
-        <source src="hls/sintel/index.m3u8" type="application/x-mpegURL">
-    </video>
+    <body>
+      <video width="640" height="480" controls autoplay>
+        <source src="http://127.0.0.1:8000/hls/sintel/index.m3u8" type="application/x-mpegURL">
+      </video>
+    </body>
+
+MPEG-DASH in HTML (using [dash.js](https://github.com/Dash-Industry-Forum/dash.js) player)::
+
+    <script src="http://cdn.dashjs.org/latest/dash.all.min.js"></script>
+
+    <style>
+    video {
+      width: 640px;
+      height: 360px;
+    }
+    </style>
+
+    <body>
+      <div>
+        <video data-dashjs-player autoplay src="http://127.0.0.1:8000/dash/sintel/index.mpd" controls></video>
+      </div>
+    </body>
 
 broadcast mp4 file::
 
