@@ -42,11 +42,6 @@ nginx.conf::
     }
 
     http {
-        types {
-            application/x-mpegURL m3u8;
-            video/MP2T ts;
-        }
-
         server {
             listen 8000;
 
@@ -63,6 +58,20 @@ nginx.conf::
             }
 
             location /hls/ {
+                types {
+                    application/x-mpegURL m3u8;
+                    video/MP2T ts;
+                }
+
+                root /var;
+            }
+
+            location /dash/ {
+                types {
+                    application/dash+xml mpd;
+                    video/mp4 mp4;
+                }
+
                 root /var;
             }
         }
