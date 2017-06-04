@@ -1453,3 +1453,41 @@ ngx_ts_crc32(u_char *p, size_t len)
 
     return crc;
 }
+
+
+ngx_uint_t
+ngx_ts_dash_get_oti(u_char type)
+{
+    /*
+     * ISO/IEC 14496-1:2001(E)
+     * Table 8 - objectTypeIndication Values, p. 30
+     */
+
+    switch (type) {
+    case NGX_TS_VIDEO_MPEG1:
+        return 0x6a;
+
+    case NGX_TS_VIDEO_MPEG2:
+        /* treat as Main Profile */
+        return 0x61;
+
+    case NGX_TS_VIDEO_MPEG4:
+        return 0x20;
+
+    case NGX_TS_VIDEO_AVC:
+        return 0x21;
+
+    case NGX_TS_AUDIO_MPEG1:
+        return 0x6b;
+
+    case NGX_TS_AUDIO_MPEG2:
+        return 0x69;
+
+    case NGX_TS_AUDIO_AAC:
+        /* consider as ISO/IEC 14496-3 Audio */
+        return 0x40;
+
+    default:
+        return 0;
+    }
+}

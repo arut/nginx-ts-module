@@ -53,7 +53,7 @@ typedef struct {
     ngx_uint_t              seg;
     uint64_t                seg_pts;
     uint64_t                seg_dts;
-    uint64_t                pts;
+    uint64_t                dts;
 
     ngx_uint_t              bandwidth;
     ngx_uint_t              bandwidth_bytes;
@@ -110,5 +110,13 @@ ngx_ts_dash_t *ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name);
 char *ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
+u_char *ngx_ts_dash_write_segment_meta(u_char *p, ngx_ts_dash_rep_t *rep);
+u_char *ngx_ts_dash_write_segment_data(u_char *p, ngx_ts_dash_rep_t *rep);
+u_char *ngx_ts_dash_write_init_segment(u_char *p, ngx_ts_dash_rep_t *rep);
+
+u_char *ngx_ts_dash_write64(u_char *p, uint64_t v);
+u_char *ngx_ts_dash_write32(u_char *p, uint32_t v);
+u_char *ngx_ts_dash_write16(u_char *p, uint16_t v);
+uint32_t ngx_ts_dash_read32(u_char *p);
 
 #endif /* _NGX_TS_DASH_H_INCLUDED_ */

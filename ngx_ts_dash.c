@@ -32,33 +32,13 @@ static ngx_int_t ngx_ts_dash_close_segment(ngx_ts_dash_t *dash,
     ngx_ts_dash_rep_t *rep);
 static void ngx_ts_dash_fill_subs(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep);
 static ngx_int_t ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash);
+static ngx_int_t ngx_ts_dash_write_file(u_char *path1, u_char *path2,
+    u_char *data, size_t len, ngx_log_t *log);
 static void ngx_ts_dash_format_datetime(u_char *p, time_t t);
 static void ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep);
-static ngx_uint_t ngx_ts_dash_get_oti(u_char type);
 static ngx_int_t ngx_ts_dash_write_init_segments(ngx_ts_dash_t *dash);
 static ngx_int_t ngx_ts_dash_open_segment(ngx_ts_dash_t *dash,
     ngx_ts_dash_rep_t *rep);
-
-static u_char *ngx_ts_dash_box(u_char *p, const char type[4]);
-static u_char *ngx_ts_dash_full_box(u_char *p, const char type[4],
-    u_char version, uint32_t flags);
-static u_char *ngx_ts_dash_write64(u_char *p, uint64_t v);
-static u_char *ngx_ts_dash_write32(u_char *p, uint32_t v);
-static uint32_t ngx_ts_dash_read32(u_char *p);
-
-static u_char *ngx_ts_dash_write_styp(u_char *p);
-static u_char *ngx_ts_dash_write_sidx(u_char *p, ngx_ts_dash_subs_t *subs);
-static u_char *ngx_ts_dash_write_moof(u_char *p, ngx_ts_dash_subs_t *subs,
-    ngx_uint_t video);
-static u_char *ngx_ts_dash_write_mfhd(u_char *p, ngx_ts_dash_subs_t *subs);
-static u_char *ngx_ts_dash_write_traf(u_char *p, ngx_ts_dash_subs_t *subs,
-    ngx_uint_t video);
-static u_char *ngx_ts_dash_write_tfhd(u_char *p);
-static u_char *ngx_ts_dash_write_tfdt(u_char *p, ngx_ts_dash_subs_t *subs);
-static u_char *ngx_ts_dash_write_trun(u_char *p, ngx_ts_dash_subs_t *subs,
-    ngx_uint_t video);
-static u_char *ngx_ts_dash_write_mdat(u_char *p, ngx_ts_dash_subs_t *subs);
-
 static ngx_msec_t ngx_ts_dash_file_manager(void *data);
 
 
@@ -354,7 +334,7 @@ found:
     rep->ndata += size;
     rep->nsamples++;
 
-    n = es->video ? 16 : 4;
+    n = es->video ? 16 : 8;
 
     cl = rep->last_meta;
     b = cl->buf;
@@ -374,18 +354,18 @@ found:
     b->last += n;
     rep->nmeta += n;
 
+    /* sample_duration */
+    if (rep->subs.sample_duration) {
+        ngx_ts_dash_write32(rep->subs.sample_duration, es->dts - rep->dts);
+    }
+
+    rep->subs.sample_duration = p;
+    p = ngx_ts_dash_write32(p, 0);
+
+    /* sample_size */
+    p = ngx_ts_dash_write32(p, size);
+
     if (es->video) {
-        /* sample_duration */
-        if (rep->subs.sample_duration) {
-            ngx_ts_dash_write32(rep->subs.sample_duration, es->pts - rep->pts);
-        }
-
-        rep->subs.sample_duration = p;
-        p = ngx_ts_dash_write32(p, 0);
-
-        /* sample_size */
-        p = ngx_ts_dash_write32(p, size);
-
         /*
          * ISO/IEC 14496-12:2008(E)
          * 8.8.3 Track Extends Box, Sample flags, p. 44
@@ -395,13 +375,9 @@ found:
 
         /* sample_composition_time_offset */
         ngx_ts_dash_write32(p, es->pts - es->dts);
-
-    } else {
-        /* sample_size */
-        ngx_ts_dash_write32(p, size);
     }
 
-    rep->pts = es->pts;
+    rep->dts = es->dts;
 
     if (rep->bandwidth == 0) {
         if (rep->bandwidth_bytes == 0) {
@@ -893,7 +869,7 @@ ngx_ts_dash_fill_subs(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     ngx_ts_dash_write32(subs->duration, rep->es->pts - rep->seg_pts);
 
     if (subs->sample_duration) {
-        ngx_ts_dash_write32(subs->sample_duration, rep->es->pts - rep->pts);
+        ngx_ts_dash_write32(subs->sample_duration, rep->es->dts - rep->dts);
     }
 
     traf = ngx_ts_dash_read32(subs->traf) + rep->nmeta;
@@ -919,9 +895,6 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
     u_char                 *p, *last, *data;
     time_t                  now;
     size_t                  len;
-    ssize_t                 n;
-    ngx_fd_t                fd;
-    ngx_err_t               err;
     ngx_uint_t              i, j, k, pid, bandwidth, min_update, min_buftime,
                             buf_depth;
     ngx_ts_stream_t        *ts;
@@ -1058,15 +1031,35 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
 
     len = p - data;
 
-    fd = ngx_open_file(dash->mpd_tmp_path,
+    if (ngx_ts_dash_write_file(dash->mpd_tmp_path, dash->mpd_path, data, len,
+                               ts->log)
+        != NGX_OK)
+    {
+        ngx_free(data);
+        return NGX_ERROR;
+    }
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_ts_dash_write_file(u_char *path1, u_char *path2, u_char *data, size_t len,
+    ngx_log_t *log)
+{
+    ssize_t    n;
+    ngx_fd_t   fd;
+    ngx_err_t  err;
+
+    fd = ngx_open_file(path1,
                        NGX_FILE_WRONLY,
                        NGX_FILE_TRUNCATE,
                        NGX_FILE_DEFAULT_ACCESS);
 
     if (fd == NGX_INVALID_FILE) {
-        ngx_log_error(NGX_LOG_EMERG, ts->log, ngx_errno,
-                      ngx_open_file_n " \"%s\" failed", dash->mpd_tmp_path);
-        goto failed;
+        ngx_log_error(NGX_LOG_EMERG, log, ngx_errno,
+                      ngx_open_file_n " \"%s\" failed", path1);
+        return NGX_ERROR;
     }
 
     n = ngx_write_fd(fd, data, len);
@@ -1074,39 +1067,33 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
     err = errno;
 
     if (ngx_close_file(fd) == NGX_FILE_ERROR) {
-        ngx_log_error(NGX_LOG_ALERT, ts->log, ngx_errno,
-                      ngx_close_file_n " \"%s\" failed", dash->mpd_tmp_path);
-        goto failed;
+        ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
+                      ngx_close_file_n " \"%s\" failed", path1);
+        return NGX_ERROR;
     }
 
     if (n < 0) {
-        ngx_log_error(NGX_LOG_ALERT, ts->log, err,
-                      ngx_write_fd_n " to \"%s\" failed", dash->mpd_tmp_path);
-        goto failed;
+        ngx_log_error(NGX_LOG_ALERT, log, err,
+                      ngx_write_fd_n " to \"%s\" failed", path1);
+        return NGX_ERROR;
     }
 
     if ((size_t) n != len) {
-        ngx_log_error(NGX_LOG_ALERT, ts->log, 0,
-                      "incomplete write to \"%s\"", dash->mpd_tmp_path);
-        goto failed;
+        ngx_log_error(NGX_LOG_ALERT, log, 0,
+                      "incomplete write to \"%s\"", path1);
+        return NGX_ERROR;
     }
 
-    if (ngx_rename_file(dash->mpd_tmp_path, dash->mpd_path) == NGX_FILE_ERROR) {
-        ngx_log_error(NGX_LOG_ALERT, ts->log, ngx_errno,
-                      ngx_rename_file_n " \"%s\" to \"%s\" failed",
-                      dash->mpd_tmp_path, dash->mpd_path);
-        goto failed;
+    if (path2) {
+        if (ngx_rename_file(path1, path2) == NGX_FILE_ERROR) {
+            ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
+                          ngx_rename_file_n " \"%s\" to \"%s\" failed",
+                          path1, path2);
+            return NGX_ERROR;
+        }
     }
-
-    ngx_free(data);
 
     return NGX_OK;
-
-failed:
-
-    ngx_free(data);
-
-    return NGX_ERROR;
 }
 
 
@@ -1154,72 +1141,52 @@ ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
 }
 
 
-static ngx_uint_t
-ngx_ts_dash_get_oti(u_char type)
-{
-    /*
-     * ISO/IEC 14496-1:2001(E)
-     * Table 8 - objectTypeIndication Values, p. 30
-     */
-
-    switch (type) {
-    case NGX_TS_VIDEO_MPEG1:
-        return 0x6a;
-
-    case NGX_TS_VIDEO_MPEG2:
-        /* treat as Main Profile */
-        return 0x61;
-
-    case NGX_TS_VIDEO_MPEG4:
-        return 0x20;
-
-    case NGX_TS_VIDEO_AVC:
-        return 0x21;
-
-    case NGX_TS_AUDIO_MPEG1:
-        return 0x6b;
-
-    case NGX_TS_AUDIO_MPEG2:
-        return 0x69;
-
-    case NGX_TS_AUDIO_AAC:
-        /* consider as ISO/IEC 14496-3 Audio */
-        return 0x40;
-
-    default:
-        return 0;
-    }
-}
-
-
 static ngx_int_t
 ngx_ts_dash_write_init_segments(ngx_ts_dash_t *dash)
 {
-    ngx_ts_stream_t  *ts;
+    size_t              len;
+    u_char             *data;
+    ngx_uint_t          i, j;
+    ngx_ts_stream_t    *ts;
+    ngx_ts_dash_set_t  *set;
+    ngx_ts_dash_rep_t  *rep;
 
     ts = dash->ts;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0,
-                   "ts dash write init segments");
-
-    (void) ts;
-
-#if 0
     for (i = 0; i < dash->nsets; i++) {
         set = &dash->sets[i];
 
-        for (j = 0; j < sets->nreps; j++) {
-            rep = &rep->sets[j];
+        for (j = 0; j < set->nreps; j++) {
+            rep = &set->reps[j];
 
             if (rep->init == 0) {
+                ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                               "ts dash write init segment \"%s\"",
+                               rep->init_path);
+
+                /* XXX ensure buf size */
+                data = ngx_alloc(1024 + rep->sps_len + rep->pps_len, ts->log);
+                if (data == NULL) {
+                    return NGX_ERROR;
+                }
+
+                len = ngx_ts_dash_write_init_segment(data, rep) - data;
+
+                if (ngx_ts_dash_write_file(rep->init_path, NULL, data, len,
+                                           ts->log)
+                    != NGX_OK)
+                {
+                    ngx_free(data);
+                    return NGX_ERROR;
+                }
+
+                ngx_free(data);
+
                 rep->init = 1;
-
-
-                /* XXX write file */
             }
         }
     }
-#endif
+
     return NGX_OK;
 }
 
@@ -1259,9 +1226,7 @@ ngx_ts_dash_open_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     b = rep->meta->buf;
 
-    b->last = ngx_ts_dash_write_styp(b->last);
-    b->last = ngx_ts_dash_write_sidx(b->last, &rep->subs);
-    b->last = ngx_ts_dash_write_moof(b->last, &rep->subs, es->video);
+    b->last = ngx_ts_dash_write_segment_meta(b->last, rep);
 
     rep->data = ngx_ts_dash_get_buffer(dash);
     if (rep->data == NULL) {
@@ -1272,370 +1237,9 @@ ngx_ts_dash_open_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     b = rep->data->buf;
 
-    b->last = ngx_ts_dash_write_mdat(b->last, &rep->subs);
+    b->last = ngx_ts_dash_write_segment_data(b->last, rep);
 
     return NGX_OK;
-}
-
-
-static u_char *
-ngx_ts_dash_box(u_char *p, const char type[4])
-{
-    /*
-     * class Box
-     * ISO/IEC 14496-12:2008(E)
-     * 4.2 Object Structure, p. 4
-     */
-
-    /* size */
-    p += 4;
-
-    /* type */
-    p = ngx_cpymem(p, type, 4);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_full_box(u_char *p, const char type[4], u_char version,
-    uint32_t flags)
-{
-    /*
-     * class Box
-     * ISO/IEC 14496-12:2008(E)
-     * 4.2 Object Structure, p. 4
-     */
-
-    p = ngx_ts_dash_box(p, type);
-
-    /* version */
-    *p++ = version;
-
-    /* flags */
-    *p++ = (u_char) (flags >> 16);
-    *p++ = (u_char) (flags >> 8);
-    *p++ = (u_char) flags;
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write64(u_char *p, uint64_t v)
-{
-    *p++ = (u_char) (v >> 56);
-    *p++ = (u_char) (v >> 48);
-    *p++ = (u_char) (v >> 40);
-    *p++ = (u_char) (v >> 32);
-    *p++ = (u_char) (v >> 24);
-    *p++ = (u_char) (v >> 16);
-    *p++ = (u_char) (v >> 8);
-    *p++ = (u_char) v;
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write32(u_char *p, uint32_t v)
-{
-    *p++ = (u_char) (v >> 24);
-    *p++ = (u_char) (v >> 16);
-    *p++ = (u_char) (v >> 8);
-    *p++ = (u_char) v;
-
-    return p;
-}
-
-
-static uint32_t
-ngx_ts_dash_read32(u_char *p)
-{
-    uint32_t  v;
-
-    v = *p++;
-    v = (v << 8) + *p++;
-    v = (v << 8) + *p++;
-    v = (v << 8) + *p;
-
-    return v;
-}
-
-
-static u_char *
-ngx_ts_dash_write_styp(u_char *p)
-{
-    /*
-     * ETSI TS 126 244 V12.3.0 (2014-10)
-     * 13.2 Segment types, p. 52
-     */
-
-    /*
-     * ISO/IEC 14496-12:2008(E)
-     * 4.3 File Type Box, p. 4
-     */
-
-    u_char  *ps;
-
-    ps = p;
-
-    p = ngx_ts_dash_box(p, "styp");
-
-    /* major_brand */
-    p = ngx_cpymem(p, "iso6", 4); /* XXX 3gh9 */
-
-    /* TODO version */
-    /* minor_version */
-    p = ngx_ts_dash_write32(p, 1);
-
-    /* TODO brands */
-    /* compatible_brands */
-    p = ngx_cpymem(p, "isom", 4);
-    p = ngx_cpymem(p, "iso6", 4);
-    p = ngx_cpymem(p, "dash", 4);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_sidx(u_char *p, ngx_ts_dash_subs_t *subs)
-{
-    /*
-     * ETSI TS 126 244 V12.3.0 (2014-10)
-     * 13.4 Segment Index Box, p. 53
-     */
-
-    /* TODO ISO/IEC 14496-12:2012 entry */
-
-    u_char  *ps;
-
-    ps = p;
-
-    p = ngx_ts_dash_full_box(p, "sidx", 1, 0);
-
-    /* reference_ID */
-    p = ngx_ts_dash_write32(p, 1);
-
-    /* timescale */
-    p = ngx_ts_dash_write32(p, 90000);
-
-    /* earliest_presentation_time */
-    subs->pts = p;
-    p = ngx_ts_dash_write64(p, 0);
-
-    /* first_offset */
-    p = ngx_ts_dash_write64(p, 0);
-
-    /* reference_count */
-    p = ngx_ts_dash_write32(p, 1);
-
-    /* referenced_size */
-    subs->moof_mdat = p;
-    p = ngx_ts_dash_write32(p, 0);
-
-    /* subsegment_duration */
-    subs->duration = p;
-    p = ngx_ts_dash_write32(p, 0);
-
-    /* starts_with_SAP, SAP_type, SAP_delta_time */
-    p = ngx_ts_dash_write32(p, 0x80000000);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_moof(u_char *p, ngx_ts_dash_subs_t *subs, ngx_uint_t video)
-{
-    /*
-     * ISO/IEC 14496-12:2008(E)
-     * 8.8.4 Movie Fragment Box, p. 45
-     */
-
-    u_char  *ps;
-
-    subs->moof = p;
-
-    ps = p;
-
-    p = ngx_ts_dash_box(p, "moof");
-
-    p = ngx_ts_dash_write_mfhd(p, subs);
-    p = ngx_ts_dash_write_traf(p, subs, video);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_mfhd(u_char *p, ngx_ts_dash_subs_t *subs)
-{
-    /*
-     * ISO/IEC 14496-12:2008(E)
-     * 8.8.5 Movie Fragment Header Box, p. 45
-     */
-
-    u_char  *ps;
-
-    ps = p;
-
-    p = ngx_ts_dash_full_box(p, "mfhd", 0, 0);
-
-    /* sequence_number */
-    subs->seq = p;
-    p = ngx_ts_dash_write32(p, 0);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_traf(u_char *p, ngx_ts_dash_subs_t *subs, ngx_uint_t video)
-{
-    /*
-     * ISO/IEC 14496-12:2008(E)
-     * 8.8.6 Track Fragment Box, p. 46
-     */
-
-    u_char  *ps;
-
-    subs->traf = p;
-
-    ps = p;
-
-    p = ngx_ts_dash_box(p, "traf");
-
-    p = ngx_ts_dash_write_tfhd(p);
-    p = ngx_ts_dash_write_tfdt(p, subs);
-    p = ngx_ts_dash_write_trun(p, subs, video);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_tfhd(u_char *p)
-{
-    /*
-     * ISO/IEC 14496-12:2008(E)
-     * 8.8.7 Track Fragment Header Box, p. 46
-     */
-
-    u_char  *ps;
-
-    ps = p;
-
-    p = ngx_ts_dash_full_box(p, "tfhd", 0, 0);
-
-    /* track_ID */
-    p = ngx_ts_dash_write32(p, 1);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_tfdt(u_char *p, ngx_ts_dash_subs_t *subs)
-{
-    /* 
-     * ETSI TS 126 244 V12.3.0 (2014-10)
-     * 13.5 Track Fragment Decode Time Box, p. 55
-     */
-
-    u_char  *ps;
-
-    ps = p;
-
-    p = ngx_ts_dash_full_box(p, "tfdt", 1, 0);
-
-    /* baseMediaDecodeTime */
-    subs->dts = p;
-    p = ngx_ts_dash_write64(p, 0);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_trun(u_char *p, ngx_ts_dash_subs_t *subs, ngx_uint_t video)
-{
-    /*
-     * ISO/IEC 14496-12:2008(E)
-     * 8.8.8 Track Fragment Run Box, p. 47
-     */
-
-    u_char    *ps;
-    uint32_t   flags;
-
-    flags = 0x000001         /* data-offset-present */
-            | 0x000200;      /* sample-size-present */
-
-    if (video) {
-       flags |= 0x000100     /* sample-duration-present */
-                | 0x000400   /* sample-flags-present */
-                | 0x000800;  /* sample-composition-time-offset-present */
-    }
-
-    subs->trun = p;
-
-    ps = p;
-
-    p = ngx_ts_dash_full_box(p, "trun", 0, flags);
-
-    /* sample_count */
-    subs->nsamples = p;
-    p = ngx_ts_dash_write32(p, 0);
-
-    /* data_offset */
-    subs->moof_data = p;
-    p = ngx_ts_dash_write32(p, 0);
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_write_mdat(u_char *p, ngx_ts_dash_subs_t *subs)
-{
-
-    u_char  *ps;
-
-    subs->mdat = p;
-
-    ps = p;
-
-    p = ngx_ts_dash_box(p, "mdat");
-
-    /* size */
-    ngx_ts_dash_write32(ps, p - ps);
-
-    return p;
 }
 
 

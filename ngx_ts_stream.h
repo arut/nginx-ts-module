@@ -107,6 +107,7 @@ ngx_chain_t *ngx_ts_write_pmt(ngx_ts_stream_t *ts, ngx_ts_program_t *prog);
 ngx_chain_t *ngx_ts_write_pes(ngx_ts_stream_t *ts, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *bufs);
 void ngx_ts_free_chain(ngx_ts_stream_t *ts, ngx_chain_t **ll);
+ngx_uint_t ngx_ts_dash_get_oti(u_char type);
 
 
 #endif /* _NGX_TS_STREAM_H_INCLUDED_ */

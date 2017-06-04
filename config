@@ -8,6 +8,7 @@ ngx_module_deps="$ngx_addon_dir/ngx_ts_stream.h \
 ngx_module_srcs="$ngx_addon_dir/ngx_http_ts_module.c \
                  $ngx_addon_dir/ngx_ts_stream.c \
                  $ngx_addon_dir/ngx_ts_hls.c \
-                 $ngx_addon_dir/ngx_ts_dash.c"
+                 $ngx_addon_dir/ngx_ts_dash.c \
+                 $ngx_addon_dir/ngx_ts_dash_mp4.c"
 
 . auto/module
