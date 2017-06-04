@@ -34,6 +34,8 @@ static void ngx_ts_dash_fill_subs(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep);
 static ngx_int_t ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash);
 static void ngx_ts_dash_format_datetime(u_char *p, time_t t);
 static void ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep);
+static ngx_uint_t ngx_ts_dash_get_oti(u_char type);
+static ngx_int_t ngx_ts_dash_write_init_segments(ngx_ts_dash_t *dash);
 static ngx_int_t ngx_ts_dash_open_segment(ngx_ts_dash_t *dash,
     ngx_ts_dash_rep_t *rep);
 
@@ -266,6 +268,16 @@ ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash)
             rep->path.len = ngx_sprintf(rep->path.data, "%V/%ui.",
                                         &dash->path, (ngx_uint_t) es->pid)
                             - rep->path.data;
+
+            len = dash->path.len + 1 + NGX_INT_T_LEN + sizeof(".init.mp4");
+
+            rep->init_path = ngx_pnalloc(ts->pool, len);
+            if (rep->init_path == NULL) {
+                return NGX_ERROR;
+            }
+
+            ngx_sprintf(rep->init_path, "%V/%ui.init.mp4%Z",
+                        &dash->path, (ngx_uint_t) es->pid);
         }
     }
 
@@ -374,8 +386,12 @@ found:
         /* sample_size */
         p = ngx_ts_dash_write32(p, size);
 
-        /* sample_flags */
-        p = ngx_ts_dash_write32(p, es->rand ? 0x00000000 : 0x00010000); /*XXX*/
+        /*
+         * ISO/IEC 14496-12:2008(E)
+         * 8.8.3 Track Extends Box, Sample flags, p. 44
+         * sample_is_difference_sample for non-key sample
+         */
+        p = ngx_ts_dash_write32(p, es->rand ? 0x00000000 : 0x00010000);
 
         /* sample_composition_time_offset */
         ngx_ts_dash_write32(p, es->pts - es->dts);
@@ -420,10 +436,13 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
      * 5.3.4.2 Sample format, p. 15
      */
 
-    size_t        size, nsize, n;
-    u_char        ch, *p, *psize;
-    ngx_uint_t    start, zeroes;
-    ngx_chain_t  *out;
+    size_t            size, nsize, n;
+    u_char            ch, *p, *psize;
+    ngx_uint_t        start, zeroes;
+    ngx_chain_t      *out, *sps, *pps, **ll;
+    ngx_ts_stream_t  *ts;
+
+    ts = dash->ts;
 
     start = 0;
     size = 0;
@@ -431,6 +450,8 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
     zeroes = 0;
     psize = NULL;
     out = NULL;
+    sps = NULL;
+    pps = NULL;
 
     for (/* void */; bufs; bufs = bufs->next) {
 
@@ -469,25 +490,25 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
                 switch (ch & 0x1f) {
 
                 case 7: /* SPS */
-                    if (rep->sps == NULL) {
-                        rep->sps = ngx_ts_dash_get_buffer(dash);
-                        if (rep->sps == NULL) {
+                    if (rep->sps == NULL && sps == NULL) {
+                        sps = ngx_ts_dash_get_buffer(dash);
+                        if (sps == NULL) {
                             return NGX_ERROR;
                         }
 
-                        out = rep->sps;
+                        out = sps;
                     }
 
                     break;
 
                 case 8: /* PPS */
-                    if (rep->pps == NULL) {
-                        rep->pps = ngx_ts_dash_get_buffer(dash);
-                        if (rep->pps == NULL) {
+                    if (rep->pps == NULL && pps == NULL) {
+                        pps = ngx_ts_dash_get_buffer(dash);
+                        if (pps == NULL) {
                             return NGX_ERROR;
                         }
 
-                        out = rep->pps;
+                        out = pps;
                     }
 
                     break;
@@ -505,9 +526,12 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
                         out = out->next;
                     }
 
+                    size += 4;
+                }
+
+                if (out) {
                     psize = out->buf->last;
                     out->buf->last += 4;
-                    size += 4;
                 }
             }
 
@@ -528,8 +552,11 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
                 }
 
                 if (psize) {
-                    size += n;
                     nsize += n;
+                }
+
+                if (rep->last_data == out) {
+                    size += n;
                 }
 
                 for (/* void */; zeroes; zeroes--) {
@@ -545,6 +572,64 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
 
     if (psize) {
         ngx_ts_dash_write32(psize, nsize);
+    }
+
+    if (sps) {
+        n = ngx_ts_dash_read32(sps->buf->pos);
+
+        if (n > 0xffff) {
+            ngx_log_error(NGX_LOG_ERR, ts->log, 0,
+                          "too big AVC SPS:%uz", n);
+            return NGX_ERROR;
+        }
+
+        ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts AVC SPS:%uz", n);
+
+        rep->sps_len = n;
+        rep->sps = ngx_pnalloc(ts->pool, n);
+        if (rep->sps == NULL) {
+            return NGX_ERROR;
+        }
+
+        p = rep->sps;
+        sps->buf->pos += 4;
+
+        for (ll = &sps; *ll; ll = &(*ll)->next) {
+            p = ngx_cpymem(p, (*ll)->buf->pos,
+                           (*ll)->buf->last - (*ll)->buf->pos);
+        }
+
+        *ll = dash->free;
+        dash->free = sps;
+    }
+
+    if (pps) {
+        n = ngx_ts_dash_read32(pps->buf->pos);
+
+        if (n > 0xffff) {
+            ngx_log_error(NGX_LOG_ERR, ts->log, 0,
+                          "too big AVC PPS:%uz", n);
+            return NGX_ERROR;
+        }
+
+        ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts AVC PPS:%uz", n);
+
+        rep->pps_len = n;
+        rep->pps = ngx_pnalloc(ts->pool, n);
+        if (rep->pps == NULL) {
+            return NGX_ERROR;
+        }
+
+        p = rep->pps;
+        pps->buf->pos += 4;
+
+        for (ll = &pps; *ll; ll = &(*ll)->next) {
+            p = ngx_cpymem(p, (*ll)->buf->pos,
+                           (*ll)->buf->last - (*ll)->buf->pos);
+        }
+
+        *ll = dash->free;
+        dash->free = pps;
     }
 
     return size;
@@ -966,6 +1051,11 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
         dash->playlist_len *= 2;
     }
 
+    if (ngx_ts_dash_write_init_segments(dash) != NGX_OK) {
+        ngx_free(data);
+        return NGX_ERROR;
+    }
+
     len = p - data;
 
     fd = ngx_open_file(dash->mpd_tmp_path,
@@ -1038,57 +1128,99 @@ ngx_ts_dash_format_datetime(u_char *p, time_t t)
 static void
 ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
 {
-    ngx_buf_t   *b;
-    ngx_uint_t   profile, constraints, level;
+    u_char       type;
+    ngx_uint_t   profile, compat, level, oti;
 
-    switch (rep->es->type) {
+    type = rep->es->type;
+
+    if (type == NGX_TS_VIDEO_AVC && rep->sps_len >= 4) {
+        profile = rep->sps[1];
+        compat = rep->sps[2];
+        level = rep->sps[3];
+
+        ngx_sprintf(p, "avc1.%02uXi%02uXi%02uXi%Z", profile, compat, level);
+        return;
+    }
+
+    if (type == NGX_TS_AUDIO_AAC && rep->adts) {
+        profile = (rep->adts[2] >> 6) + 1;
+        ngx_sprintf(p, "mp4a.40.%ui%Z", profile);
+        return;
+    }
+
+    oti = ngx_ts_dash_get_oti(type);
+
+    ngx_sprintf(p, "mp4%c.%02uXi%Z", rep->es->video ? 'v' : 'a', oti);
+}
+
+
+static ngx_uint_t
+ngx_ts_dash_get_oti(u_char type)
+{
+    /*
+     * ISO/IEC 14496-1:2001(E)
+     * Table 8 - objectTypeIndication Values, p. 30
+     */
+
+    switch (type) {
     case NGX_TS_VIDEO_MPEG1:
-        ngx_sprintf(p, "mp4v.6A%Z");
-        break;
+        return 0x6a;
 
     case NGX_TS_VIDEO_MPEG2:
-        ngx_sprintf(p, "mp4v.61%Z");
-        break;
+        /* treat as Main Profile */
+        return 0x61;
 
     case NGX_TS_VIDEO_MPEG4:
-        ngx_sprintf(p, "mp4v.20%Z");
-        break;
+        return 0x20;
 
-     case NGX_TS_VIDEO_AVC:
-        profile = 0;
-        constraints = 0;
-        level = 0;
-
-        if (rep->sps) {
-            b = rep->sps->buf;
-            if (b->last - b->pos > 3) {
-                profile = b->pos[1];
-                constraints = b->pos[2];
-                level = b->pos[3];
-            }
-        }
-
-        ngx_sprintf(p, "avc1.%02uXi%02uXi%02uXi%Z",
-                    profile, constraints, level);
-        break;
+    case NGX_TS_VIDEO_AVC:
+        return 0x21;
 
     case NGX_TS_AUDIO_MPEG1:
-        ngx_sprintf(p, "mp4a.6B%Z");
-        break;
+        return 0x6b;
 
     case NGX_TS_AUDIO_MPEG2:
-        ngx_sprintf(p, "mp4a.69%Z");
-        break;
+        return 0x69;
 
     case NGX_TS_AUDIO_AAC:
-        profile = rep->adts ? 1 + (rep->adts[2] >> 6) : 0;
-        ngx_sprintf(p, "mp4a.40.%ui%Z", profile);
-        break;
+        /* consider as ISO/IEC 14496-3 Audio */
+        return 0x40;
 
     default:
-        /* should never reach this */
-        *p = 0;
+        return 0;
     }
+}
+
+
+static ngx_int_t
+ngx_ts_dash_write_init_segments(ngx_ts_dash_t *dash)
+{
+    ngx_ts_stream_t  *ts;
+
+    ts = dash->ts;
+
+    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                   "ts dash write init segments");
+
+    (void) ts;
+
+#if 0
+    for (i = 0; i < dash->nsets; i++) {
+        set = &dash->sets[i];
+
+        for (j = 0; j < sets->nreps; j++) {
+            rep = &rep->sets[j];
+
+            if (rep->init == 0) {
+                rep->init = 1;
+
+
+                /* XXX write file */
+            }
+        }
+    }
+#endif
+    return NGX_OK;
 }
 
 

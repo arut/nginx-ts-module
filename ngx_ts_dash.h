@@ -46,6 +46,8 @@ typedef struct {
 
 
 typedef struct {
+    ngx_ts_es_t            *es;
+
     ngx_ts_dash_segment_t  *segs;
     ngx_uint_t              nsegs;
     ngx_uint_t              seg;
@@ -57,12 +59,16 @@ typedef struct {
     ngx_uint_t              bandwidth_bytes;
     uint64_t                bandwidth_pts;
 
-    ngx_chain_t            *sps;
-    ngx_chain_t            *pps;
-    u_char                 *adts;
+    ngx_uint_t              init;  /* unsigned  init:1; */
 
-    ngx_ts_es_t            *es;
+    u_char                 *adts;
+    u_char                 *sps;
+    u_char                 *pps;
+    size_t                  sps_len;
+    size_t                  pps_len;
+
     ngx_str_t               path;
+    u_char                 *init_path;
 
     ngx_chain_t            *meta;
     ngx_chain_t            *last_meta;
