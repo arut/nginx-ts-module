@@ -919,7 +919,8 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
     ngx_ts_dash_format_datetime(avail_start_time, dash->availability_start);
     ngx_ts_dash_format_datetime(pub_time, now);
 
-    min_update = dash->conf->min_seg / 1000; /* TODO */
+    /* TODO fractions */
+    min_update = dash->conf->max_seg / 1000; /* TODO */
     min_buftime = dash->conf->min_seg / 1000; /* TODO */
     buf_depth = dash->conf->max_seg * dash->conf->nsegs / 1000;
 
