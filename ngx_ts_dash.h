@@ -57,9 +57,7 @@ typedef struct {
 
     ngx_uint_t              bandwidth;
     ngx_uint_t              bandwidth_bytes;
-    uint64_t                bandwidth_pts;
-
-    ngx_uint_t              init;  /* unsigned  init:1; */
+    uint64_t                bandwidth_dts;
 
     u_char                 *adts;
     u_char                 *sps;
@@ -69,6 +67,7 @@ typedef struct {
 
     ngx_str_t               path;
     u_char                 *init_path;
+    u_char                 *init_tmp_path;
 
     ngx_chain_t            *meta;
     ngx_chain_t            *last_meta;

@@ -15,6 +15,8 @@ static ngx_int_t ngx_ts_hls_handler(ngx_ts_handler_data_t *hd);
 static ngx_int_t ngx_ts_hls_pat_handler(ngx_ts_hls_t *hls);
 static ngx_int_t ngx_ts_hls_pes_handler(ngx_ts_hls_t *hls,
     ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
+static void ngx_ts_hls_update_bandwidth(ngx_ts_hls_t *hls,
+    ngx_ts_hls_variant_t *var, ngx_chain_t *bufs, uint64_t dts);
 static ngx_int_t ngx_ts_hls_close_segment(ngx_ts_hls_t *hls,
     ngx_ts_hls_variant_t *var);
 static ngx_int_t ngx_ts_hls_update_playlist(ngx_ts_hls_t *hls,
@@ -111,7 +113,7 @@ ngx_ts_hls_cleanup(void *data)
             es = &var->prog->es[i];
 
             if (es->ptsf) {
-                d = es->pts - var->seg_pts;
+                d = es->dts - var->seg_dts;
                 if (maxd < d) {
                     maxd = d;
                 }
@@ -279,9 +281,8 @@ static ngx_int_t
 ngx_ts_hls_pes_handler(ngx_ts_hls_t *hls, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *bufs)
 {
-    int64_t                d, analyze;
     ngx_uint_t             n;
-    ngx_chain_t           *out, *cl;
+    ngx_chain_t           *out;
     ngx_ts_stream_t       *ts;
     ngx_ts_hls_variant_t  *var;
 
@@ -303,6 +304,8 @@ ngx_ts_hls_pes_handler(ngx_ts_hls_t *hls, ngx_ts_program_t *prog,
 
 found:
 
+    ngx_ts_hls_update_bandwidth(hls, var, bufs, es->pts);
+
     if (ngx_ts_hls_close_segment(hls, var) != NGX_OK) {
         return NGX_ERROR;
     }
@@ -322,26 +325,40 @@ found:
         return NGX_ERROR;
     }
 
-    if (var->bandwidth == 0) {
-        if (var->bandwidth_bytes == 0) {
-            var->bandwidth_pts = es->pts;
-        }
-
-        for (cl = out; cl; cl = cl->next) {
-            var->bandwidth_bytes += cl->buf->last - cl->buf->pos;
-        }
-
-        d = es->pts - var->bandwidth_pts;
-        analyze = (int64_t) hls->conf->analyze * 90;
-
-        if (d >= analyze) {
-            var->bandwidth = var->bandwidth_bytes * 8 * 90000 / d;
-        }
-    }
-
     ngx_ts_free_chain(ts, &out);
 
     return NGX_OK;
+}
+
+static void
+ngx_ts_hls_update_bandwidth(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var,
+    ngx_chain_t *bufs, uint64_t dts)
+{
+    int64_t  d, analyze;
+
+    if (var->bandwidth) {
+        return;
+    }
+
+    if (var->bandwidth_bytes == 0) {
+        var->bandwidth_dts = dts;
+    }
+
+    while (bufs) {
+        var->bandwidth_bytes += bufs->buf->last - bufs->buf->pos;
+        bufs = bufs->next;
+    }
+
+    d = dts - var->bandwidth_dts;
+    analyze = (int64_t) hls->conf->analyze * 90;
+
+    if (d >= analyze) {
+        var->bandwidth = var->bandwidth_bytes * 8 * 90000 / d;
+    }
+
+    ngx_log_debug2(NGX_LOG_DEBUG_CORE, hls->ts->log, 0,
+                   "ts hls bandwidth:%ui, pid:%ud",
+                   var->bandwidth, (unsigned) var->prog->pid);
 }
 
 
@@ -363,10 +380,10 @@ ngx_ts_hls_close_segment(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var)
             es = &var->prog->es[n];
 
             if (es->ptsf) {
-                d = es->pts - var->seg_pts;
+                d = es->dts - var->seg_dts;
 
                 if (d > 0) {
-                    var->seg_pts = es->pts;
+                    var->seg_dts = es->dts;
                 }
             }
         }
@@ -381,13 +398,13 @@ ngx_ts_hls_close_segment(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var)
         es = &var->prog->es[n];
 
         if (es->ptsf) {
-            d = es->pts - var->seg_pts;
+            d = es->dts - var->seg_dts;
 
             if (d >= max_seg
                 || (d >= min_seg && !var->prog->video)
                 || (d >= min_seg && es->video && es->rand))
             {
-                var->seg_pts = es->pts;
+                var->seg_dts = es->dts;
                 goto close;
             }
         }

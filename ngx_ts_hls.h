@@ -36,12 +36,12 @@ typedef struct {
 
     ngx_uint_t             bandwidth;
     ngx_uint_t             bandwidth_bytes;
-    uint64_t               bandwidth_pts;
+    uint64_t               bandwidth_dts;
 
     ngx_ts_hls_segment_t  *segs;
     ngx_uint_t             nsegs;
     ngx_uint_t             seg;
-    uint64_t               seg_pts;
+    uint64_t               seg_dts;
 
     u_char                *m3u8_path;
     u_char                *m3u8_tmp_path;

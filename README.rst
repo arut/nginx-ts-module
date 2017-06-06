@@ -92,7 +92,7 @@ MPEG-DASH in HTML using dash.js player (https://github.com/Dash-Industry-Forum/d
     <style>
     video {
       width: 640px;
-      height: 360px;
+      height: 480px;
     }
     </style>
 

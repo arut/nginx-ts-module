@@ -21,6 +21,8 @@ static ngx_int_t ngx_ts_dash_handler(ngx_ts_handler_data_t *hd);
 static ngx_int_t ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash);
 static ngx_int_t ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash,
     ngx_ts_program_t *prog, ngx_ts_es_t *es, ngx_chain_t *bufs);
+static void ngx_ts_dash_update_bandwidth(ngx_ts_dash_t *dash,
+    ngx_ts_dash_rep_t *rep, ngx_chain_t *bufs, uint64_t dts);
 static ssize_t ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
     ngx_chain_t *bufs);
 static ssize_t ngx_ts_dash_copy_aac(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
@@ -36,10 +38,17 @@ static ngx_int_t ngx_ts_dash_write_file(u_char *path1, u_char *path2,
     u_char *data, size_t len, ngx_log_t *log);
 static void ngx_ts_dash_format_datetime(u_char *p, time_t t);
 static void ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep);
-static ngx_int_t ngx_ts_dash_write_init_segments(ngx_ts_dash_t *dash);
+static ngx_int_t ngx_ts_dash_update_init_segments(ngx_ts_dash_t *dash);
 static ngx_int_t ngx_ts_dash_open_segment(ngx_ts_dash_t *dash,
     ngx_ts_dash_rep_t *rep);
+
 static ngx_msec_t ngx_ts_dash_file_manager(void *data);
+static ngx_int_t ngx_ts_dash_manage_file(ngx_tree_ctx_t *ctx, ngx_str_t *path);
+static ngx_int_t ngx_ts_dash_manage_directory(ngx_tree_ctx_t *ctx,
+    ngx_str_t *path);
+static ngx_int_t ngx_ts_dash_delete_directory(ngx_tree_ctx_t *ctx,
+    ngx_str_t *path);
+static ngx_int_t ngx_ts_dash_delete_file(ngx_tree_ctx_t *ctx, ngx_str_t *path);
 
 
 ngx_ts_dash_t *
@@ -249,6 +258,8 @@ ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash)
                                         &dash->path, (ngx_uint_t) es->pid)
                             - rep->path.data;
 
+            /* init.mp4 */
+
             len = dash->path.len + 1 + NGX_INT_T_LEN + sizeof(".init.mp4");
 
             rep->init_path = ngx_pnalloc(ts->pool, len);
@@ -258,6 +269,17 @@ ngx_ts_dash_pmt_handler(ngx_ts_dash_t *dash)
 
             ngx_sprintf(rep->init_path, "%V/%ui.init.mp4%Z",
                         &dash->path, (ngx_uint_t) es->pid);
+
+            /* init.mp4.tmp */
+
+            len += sizeof(".tmp") - 1;
+
+            rep->init_tmp_path = ngx_pnalloc(ts->pool, len);
+            if (rep->init_tmp_path == NULL) {
+                return NGX_ERROR;
+            }
+
+            ngx_sprintf(rep->init_tmp_path, "%s.tmp%Z", rep->init_path);
         }
     }
 
@@ -272,7 +294,6 @@ ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     u_char             *p;
     size_t              size, n;
     ssize_t             rc;
-    int64_t             d, analyze;
     ngx_buf_t          *b;
     ngx_uint_t          i, j;
     ngx_chain_t        *cl;
@@ -303,6 +324,8 @@ ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     return NGX_OK;
 
 found:
+
+    ngx_ts_dash_update_bandwidth(dash, rep, bufs, es->dts);
 
     if (ngx_ts_dash_close_segment(dash, rep) != NGX_OK) {
         return NGX_ERROR;
@@ -379,22 +402,39 @@ found:
 
     rep->dts = es->dts;
 
-    if (rep->bandwidth == 0) {
-        if (rep->bandwidth_bytes == 0) {
-            rep->bandwidth_pts = es->pts;
-        }
+    return NGX_OK;
+}
 
-        rep->bandwidth_bytes += size;
 
-        d = es->pts - rep->bandwidth_pts;
-        analyze = (int64_t) dash->conf->analyze * 90;
+static void
+ngx_ts_dash_update_bandwidth(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
+    ngx_chain_t *bufs, uint64_t dts)
+{
+    int64_t  d, analyze;
 
-        if (d >= analyze) {
-            rep->bandwidth = rep->bandwidth_bytes * 8 * 90000 / d;
-        }
+    if (rep->bandwidth) {
+        return;
     }
 
-    return NGX_OK;
+    if (rep->bandwidth_bytes == 0) {
+        rep->bandwidth_dts = dts;
+    }
+
+    while (bufs) {
+        rep->bandwidth_bytes += bufs->buf->last - bufs->buf->pos;
+        bufs = bufs->next;
+    }
+
+    d = dts - rep->bandwidth_dts;
+    analyze = (int64_t) dash->conf->analyze * 90;
+
+    if (d >= analyze) {
+        rep->bandwidth = rep->bandwidth_bytes * 8 * 90000 / d;
+    }
+
+    ngx_log_debug2(NGX_LOG_DEBUG_CORE, dash->ts->log, 0,
+                   "ts dash bandwidth:%ui, pid:%ud",
+                   rep->bandwidth, (unsigned) rep->es->pid);
 }
 
 
@@ -764,7 +804,7 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     min_seg = (int64_t) dash->conf->min_seg * 90;
     max_seg = (int64_t) dash->conf->max_seg * 90;
 
-    d = es->pts - rep->seg_pts;
+    d = es->dts - rep->seg_dts;
     if (d < min_seg || (d < max_seg && es->video && !es->rand)) {
         return NGX_OK;
     }
@@ -775,7 +815,7 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     file.name.data = path->data;
     file.name.len = ngx_sprintf(path->data + path->len, "%uL.mp4%Z",
-                                rep->seg_pts)
+                                rep->seg_dts)
                     - path->data - 1;
 
     file.log = ts->log;
@@ -842,7 +882,7 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     dash->free = out;
 
     seg = &rep->segs[rep->seg++ % rep->nsegs];
-    seg->start = rep->seg_pts;
+    seg->start = rep->seg_dts;
     seg->duration = d;
 
     if (ngx_ts_dash_update_playlist(dash) != NGX_OK) {
@@ -866,7 +906,7 @@ ngx_ts_dash_fill_subs(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     ngx_ts_dash_write32(subs->seq, rep->seg);
     ngx_ts_dash_write32(subs->nsamples, rep->nsamples);
-    ngx_ts_dash_write32(subs->duration, rep->es->pts - rep->seg_pts);
+    ngx_ts_dash_write32(subs->duration, rep->es->dts - rep->seg_dts);
 
     if (subs->sample_duration) {
         ngx_ts_dash_write32(subs->sample_duration, rep->es->dts - rep->dts);
@@ -904,6 +944,10 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
     u_char                  codec[NGX_TS_DASH_CODEC_LEN];
     u_char                  avail_start_time[NGX_TS_DASH_DATETIME_LEN];
     u_char                  pub_time[NGX_TS_DASH_DATETIME_LEN];
+
+    if (ngx_ts_dash_update_init_segments(dash) != NGX_OK) {
+        return NGX_ERROR;
+    }
 
     ts = dash->ts;
 
@@ -1025,11 +1069,6 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
         dash->playlist_len *= 2;
     }
 
-    if (ngx_ts_dash_write_init_segments(dash) != NGX_OK) {
-        ngx_free(data);
-        return NGX_ERROR;
-    }
-
     len = p - data;
 
     if (ngx_ts_dash_write_file(dash->mpd_tmp_path, dash->mpd_path, data, len,
@@ -1143,7 +1182,7 @@ ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
 
 
 static ngx_int_t
-ngx_ts_dash_write_init_segments(ngx_ts_dash_t *dash)
+ngx_ts_dash_update_init_segments(ngx_ts_dash_t *dash)
 {
     size_t              len;
     u_char             *data;
@@ -1160,31 +1199,30 @@ ngx_ts_dash_write_init_segments(ngx_ts_dash_t *dash)
         for (j = 0; j < set->nreps; j++) {
             rep = &set->reps[j];
 
-            if (rep->init == 0) {
-                ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
-                               "ts dash write init segment \"%s\"",
-                               rep->init_path);
-
-                /* XXX ensure buf size */
-                data = ngx_alloc(1024 + rep->sps_len + rep->pps_len, ts->log);
-                if (data == NULL) {
-                    return NGX_ERROR;
-                }
-
-                len = ngx_ts_dash_write_init_segment(data, rep) - data;
-
-                if (ngx_ts_dash_write_file(rep->init_path, NULL, data, len,
-                                           ts->log)
-                    != NGX_OK)
-                {
-                    ngx_free(data);
-                    return NGX_ERROR;
-                }
-
-                ngx_free(data);
-
-                rep->init = 1;
+            if (rep->bandwidth == 0) {
+                continue;
             }
+
+            ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                           "ts dash write init segment \"%s\"", rep->init_path);
+
+            /* XXX ensure buf size */
+            data = ngx_alloc(1024 + rep->sps_len + rep->pps_len, ts->log);
+            if (data == NULL) {
+                return NGX_ERROR;
+            }
+
+            len = ngx_ts_dash_write_init_segment(data, rep) - data;
+
+            if (ngx_ts_dash_write_file(rep->init_tmp_path, rep->init_path,
+                                       data, len, ts->log)
+                != NGX_OK)
+            {
+                ngx_free(data);
+                return NGX_ERROR;
+            }
+
+            ngx_free(data);
         }
     }
 
@@ -1247,8 +1285,104 @@ ngx_ts_dash_open_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 static ngx_msec_t
 ngx_ts_dash_file_manager(void *data)
 {
-    /* XXX */
-    return 10000;
+    ngx_ts_dash_conf_t *dash = data;
+
+    ngx_tree_ctx_t  tree;
+
+    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ngx_cycle->log, 0,
+                  "ts dash file manager");
+
+    tree.init_handler = NULL;
+    tree.file_handler = ngx_ts_dash_manage_file;
+    tree.pre_tree_handler = ngx_ts_dash_manage_directory;
+    tree.post_tree_handler = ngx_ts_dash_delete_directory;
+    tree.spec_handler = ngx_ts_dash_delete_file;
+    tree.data = dash;
+    tree.alloc = 0;
+    tree.log = ngx_cycle->log;
+
+    (void) ngx_walk_tree(&tree, &dash->path->name);
+
+    return dash->max_seg * dash->nsegs;
+}
+
+
+static ngx_int_t
+ngx_ts_dash_manage_file(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    ngx_ts_dash_conf_t *dash = ctx->data;
+
+    time_t  age, max_age;
+
+    age = ngx_time() - ctx->mtime;
+
+    max_age = 0;
+
+    if (path->len >= 4
+        && ngx_memcmp(path->data + path->len - 4, ".mpd", 4) == 0)
+    {
+        max_age = dash->max_seg * dash->nsegs / 1000;
+    }
+
+    if (path->len >= 4
+        && ngx_memcmp(path->data + path->len - 4, ".mp4", 4) == 0)
+    {
+        max_age = dash->max_seg * dash->nsegs / 500;
+    }
+
+    if (path->len >= 4
+        && ngx_memcmp(path->data + path->len - 4, ".tmp", 4) == 0)
+    {
+        max_age = 10;
+    }
+
+    ngx_log_debug3(NGX_LOG_DEBUG_CORE, ctx->log, 0,
+                   "ts dash file \"%s\", age:%T, max_age:%T",
+                   path->data, age, max_age);
+
+    if (age < max_age) {
+        return NGX_OK;
+    }
+
+    return ngx_ts_dash_delete_file(ctx, path);
+}
+
+
+static ngx_int_t
+ngx_ts_dash_manage_directory(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_ts_dash_delete_directory(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ctx->log, 0,
+                   "ts dash delete dir: \"%s\"", path->data);
+
+    /* non-empty directory will not be removed anyway */
+
+    /* TODO count files instead */
+
+    (void) ngx_delete_dir(path->data);
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_ts_dash_delete_file(ngx_tree_ctx_t *ctx, ngx_str_t *path)
+{
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ctx->log, 0,
+                   "ts dash file delete: \"%s\"", path->data);
+
+    if (ngx_delete_file(path->data) == NGX_FILE_ERROR) {
+        ngx_log_error(NGX_LOG_CRIT, ctx->log, ngx_errno,
+                      ngx_delete_file_n " \"%s\" failed", path->data);
+    }
+
+    return NGX_OK;
 }
 
 
