@@ -12,7 +12,7 @@
 
 #define NGX_TS_DASH_BUFFER_SIZE   1024
 
-#define NGX_TS_DASH_DATETIME_LEN  sizeof("2000-12-31T23:59:59")
+#define NGX_TS_DASH_DATETIME_LEN  sizeof("2000-12-31T23:59:59Z")
 #define NGX_TS_DASH_CODEC_LEN     sizeof("avc1.PPPCCCLLL")
 
 
@@ -300,6 +300,10 @@ ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     ngx_ts_stream_t    *ts;
     ngx_ts_dash_set_t  *set;
     ngx_ts_dash_rep_t  *rep;
+
+    if (!es->ptsf) {
+        return NGX_OK;
+    }
 
     ts = dash->ts;
 
@@ -782,6 +786,7 @@ ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash)
 static ngx_int_t
 ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 {
+    size_t                  max_size;
     ssize_t                 n;
     int64_t                 d, min_seg, max_seg;
     ngx_err_t               err;
@@ -801,12 +806,22 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     es = rep->es;
 
+    d = es->dts - rep->seg_dts;
+
     min_seg = (int64_t) dash->conf->min_seg * 90;
     max_seg = (int64_t) dash->conf->max_seg * 90;
+    max_size = dash->conf->max_size;
 
-    d = es->dts - rep->seg_dts;
-    if (d < min_seg || (d < max_seg && es->video && !es->rand)) {
-        return NGX_OK;
+    if (d < min_seg
+        || (d < max_seg && es->video && !es->rand))
+    {
+        if (max_size == 0 || rep->nmeta + rep->ndata < max_size) {
+            return NGX_OK;
+        }
+
+        ngx_log_error(NGX_LOG_WARN, ts->log, 0,
+                      "closing DASH segment \"%V%uL.mp4\" on size limit",
+                      &rep->path, rep->seg_dts);
     }
 
     path = &rep->path;
@@ -963,10 +978,21 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
     ngx_ts_dash_format_datetime(avail_start_time, dash->availability_start);
     ngx_ts_dash_format_datetime(pub_time, now);
 
-    /* TODO fractions */
-    min_update = dash->conf->max_seg / 1000; /* TODO */
-    min_buftime = dash->conf->min_seg / 1000; /* TODO */
-    buf_depth = dash->conf->max_seg * dash->conf->nsegs / 1000;
+    /*
+     *                 timeShiftBufferDepth
+     *       ----------------------------------------
+     *      |                                        |
+     * -----///////----------------*-----------------> now
+     *            |                |                 |
+     *             ---------------- -----------------
+     *                 liveDelay     lastSegDuration
+     *           = 2 * minBufferTime
+     *
+     */
+
+    min_update = dash->conf->min_seg / 1000;
+    min_buftime = dash->conf->min_seg / 1000;
+    buf_depth = 2 * min_buftime + dash->conf->max_seg / 1000 + 1;
 
     for ( ;; ) {
         ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
@@ -993,7 +1019,8 @@ ngx_ts_dash_update_playlist(ngx_ts_dash_t *dash)
                 "    minimumUpdatePeriod=\"PT%uiS\"\n"
                 "    minBufferTime=\"PT%uiS\"\n"
                 "    timeShiftBufferDepth=\"PT%uiS\"\n"
-                "    profiles=\"urn:mpeg:dash:profile:isoff-live:2011\">\n"
+                "    profiles=\"urn:hbbtv:dash:profile:isoff-live:2012,"
+                               "urn:mpeg:dash:profile:isoff-live:2011\">\n"
                 "  <Period\n"
                 "      id=\"0\"\n"
                 "      start=\"PT0S\">\n",
@@ -1144,7 +1171,8 @@ ngx_ts_dash_format_datetime(u_char *p, time_t t)
 
     ngx_libc_gmtime(t, &tm);
 
-    if (strftime((char *) p, NGX_TS_DASH_DATETIME_LEN, "%Y-%m-%dT%H:%M:%S", &tm)
+    if (strftime((char *) p, NGX_TS_DASH_DATETIME_LEN, "%Y-%m-%dT%H:%M:%SZ",
+                 &tm)
         == 0)
     {
         *p = 0;
@@ -1241,7 +1269,8 @@ ngx_ts_dash_open_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     }
 
     ngx_log_debug2(NGX_LOG_DEBUG_CORE, dash->ts->log, 0,
-                   "ts dash open segment \"%V%ui.mp4\"", &rep->path, rep->seg);
+                   "ts dash open segment \"%V%uL.mp4\"",
+                   &rep->path, rep->seg_dts);
 
     es = rep->es;
 
@@ -1391,9 +1420,10 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     char  *p = conf;
 
+    ssize_t              max_size;
     ngx_str_t           *value, s;
     ngx_int_t            v;
-    ngx_uint_t           i, nsegs;
+    ngx_uint_t           i, nsegs, clean;
     ngx_msec_t           min_seg, max_seg, analyze;
     ngx_ts_dash_conf_t  *dash, **field;
 
@@ -1428,7 +1458,9 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     min_seg = 5000;
     max_seg = 0;
     analyze = 0;
+    max_size = 16 * 1024 * 1024;
     nsegs = 6;
+    clean = 1;
 
     for (i = 2; i < cf->args->nelts; i++) {
 
@@ -1480,6 +1512,22 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
+        if (ngx_strncmp(value[i].data, "max_size=", 9) == 0) {
+
+            s.len = value[i].len - 9;
+            s.data = value[i].data + 9;
+
+            max_size = ngx_parse_size(&s);
+            if (max_size == NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid max segment size value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
         if (ngx_strncmp(value[i].data, "segments=", 7) == 0) {
 
             v = ngx_atoi(value[i].data + 9, value[i].len - 9);
@@ -1495,17 +1543,32 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
+        if (ngx_strcmp(value[i].data, "noclean") == 0) {
+            clean = 0;
+            continue;
+        }
+
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                            "invalid parameter \"%V\"", &value[i]);
         return NGX_CONF_ERROR;
     }
 
     dash->min_seg = min_seg;
-    dash->max_seg = max_seg ? max_seg : min_seg * 3;
-    dash->analyze = analyze ? analyze : min_seg * 3;
+
+    /*
+     * dash.js requires that segments do not
+     * differ in duration by a factor more than 2
+     */
+
+    dash->max_seg = max_seg ? max_seg : min_seg * 2;
+    dash->analyze = analyze ? analyze : min_seg * 2;
+    dash->max_size = max_size;
     dash->nsegs = nsegs;
 
-    dash->path->manager = ngx_ts_dash_file_manager;
+    if (clean) {
+        dash->path->manager = ngx_ts_dash_file_manager;
+    }
+
     dash->path->data = dash;
     dash->path->conf_file = cf->conf_file->file.name.data;
     dash->path->line = cf->conf_file->line;

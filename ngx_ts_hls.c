@@ -18,7 +18,7 @@ static ngx_int_t ngx_ts_hls_pes_handler(ngx_ts_hls_t *hls,
 static void ngx_ts_hls_update_bandwidth(ngx_ts_hls_t *hls,
     ngx_ts_hls_variant_t *var, ngx_chain_t *bufs, uint64_t dts);
 static ngx_int_t ngx_ts_hls_close_segment(ngx_ts_hls_t *hls,
-    ngx_ts_hls_variant_t *var);
+    ngx_ts_hls_variant_t *var, ngx_ts_es_t *es);
 static ngx_int_t ngx_ts_hls_update_playlist(ngx_ts_hls_t *hls,
     ngx_ts_hls_variant_t *var);
 static ngx_int_t ngx_ts_hls_update_master_playlist(ngx_ts_hls_t *hls);
@@ -112,11 +112,9 @@ ngx_ts_hls_cleanup(void *data)
         for (i = 0; i < var->prog->nes; i++) {
             es = &var->prog->es[i];
 
-            if (es->ptsf) {
-                d = es->dts - var->seg_dts;
-                if (maxd < d) {
-                    maxd = d;
-                }
+            d = es->dts - var->seg_dts;
+            if (maxd < d) {
+                maxd = d;
             }
         }
 
@@ -286,6 +284,10 @@ ngx_ts_hls_pes_handler(ngx_ts_hls_t *hls, ngx_ts_program_t *prog,
     ngx_ts_stream_t       *ts;
     ngx_ts_hls_variant_t  *var;
 
+    if (!es->ptsf) {
+        return NGX_OK;
+    }
+
     ts = hls->ts;
 
     ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts hls pes pid:%ud",
@@ -306,7 +308,7 @@ found:
 
     ngx_ts_hls_update_bandwidth(hls, var, bufs, es->pts);
 
-    if (ngx_ts_hls_close_segment(hls, var) != NGX_OK) {
+    if (ngx_ts_hls_close_segment(hls, var, es) != NGX_OK) {
         return NGX_ERROR;
     }
 
@@ -363,59 +365,44 @@ ngx_ts_hls_update_bandwidth(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var,
 
 
 static ngx_int_t
-ngx_ts_hls_close_segment(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var)
+ngx_ts_hls_close_segment(ngx_ts_hls_t *hls, ngx_ts_hls_variant_t *var,
+    ngx_ts_es_t *es)
 {
+    off_t                  max_size;
     int64_t                d, min_seg, max_seg;
-    ngx_uint_t             n;
-    ngx_ts_es_t           *es;
     ngx_ts_stream_t       *ts;
     ngx_ts_hls_segment_t  *seg;
 
     ts = hls->ts;
 
     if (var->file.fd == NGX_INVALID_FILE) {
-        /* segment not started */
-
-        for (n = 0; n < var->prog->nes; n++) {
-            es = &var->prog->es[n];
-
-            if (es->ptsf) {
-                d = es->dts - var->seg_dts;
-
-                if (d > 0) {
-                    var->seg_dts = es->dts;
-                }
-            }
-        }
-
+        var->seg_dts = es->dts;
         return NGX_OK;
     }
 
+    d = es->dts - var->seg_dts;
+
     min_seg = (int64_t) hls->conf->min_seg * 90;
     max_seg = (int64_t) hls->conf->max_seg * 90;
+    max_size = hls->conf->max_size;
 
-    for (n = 0; n < var->prog->nes; n++) {
-        es = &var->prog->es[n];
-
-        if (es->ptsf) {
-            d = es->dts - var->seg_dts;
-
-            if (d >= max_seg
-                || (d >= min_seg && !var->prog->video)
-                || (d >= min_seg && es->video && es->rand))
-            {
-                var->seg_dts = es->dts;
-                goto close;
-            }
+    if (d < min_seg
+        || (d < max_seg && es->video && !es->rand)
+        || (d < max_seg && !es->video && var->prog->video))
+    {
+        if (max_size == 0 || var->file.offset < max_size) {
+            return NGX_OK;
         }
+
+        ngx_log_error(NGX_LOG_WARN, ts->log, 0,
+                      "closing HLS segment \"%s\" on size limit",
+                      var->file.name.data);
     }
-
-    return NGX_OK;
-
-close:
 
     ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
                    "ts hls close segment \"%s\"", var->file.name.data);
+
+    var->seg_dts = es->dts;
 
     seg = &var->segs[var->seg % var->nsegs];
     seg->id = var->seg++;
@@ -837,9 +824,10 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     char  *p = conf;
 
+    ssize_t             max_size;
     ngx_str_t          *value, s;
     ngx_int_t           v;
-    ngx_uint_t          i, nsegs;
+    ngx_uint_t          i, nsegs, clean;
     ngx_msec_t          min_seg, max_seg, analyze;
     ngx_ts_hls_conf_t  *hls, **field;
 
@@ -874,7 +862,9 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     min_seg = 5000;
     max_seg = 0;
     analyze = 0;
+    max_size = 16 * 1024 * 1024;
     nsegs = 6;
+    clean = 1;
 
     for (i = 2; i < cf->args->nelts; i++) {
 
@@ -926,6 +916,22 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
+        if (ngx_strncmp(value[i].data, "max_size=", 9) == 0) {
+
+            s.len = value[i].len - 9;
+            s.data = value[i].data + 9;
+
+            max_size = ngx_parse_size(&s);
+            if (max_size == NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                   "invalid max segment size value \"%V\"",
+                                   &value[i]);
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
+
         if (ngx_strncmp(value[i].data, "segments=", 7) == 0) {
 
             v = ngx_atoi(value[i].data + 9, value[i].len - 9);
@@ -941,17 +947,26 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
+        if (ngx_strcmp(value[i].data, "noclean") == 0) {
+            clean = 0;
+            continue;
+        }
+
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                            "invalid parameter \"%V\"", &value[i]);
         return NGX_CONF_ERROR;
     }
 
     hls->min_seg = min_seg;
-    hls->max_seg = max_seg ? max_seg : min_seg * 3;
-    hls->analyze = analyze ? analyze : min_seg * 3;
+    hls->max_seg = max_seg ? max_seg : min_seg * 2;
+    hls->analyze = analyze ? analyze : min_seg * 2;
+    hls->max_size = max_size;
     hls->nsegs = nsegs;
 
-    hls->path->manager = ngx_ts_hls_file_manager;
+    if (clean) {
+        hls->path->manager = ngx_ts_hls_file_manager;
+    }
+
     hls->path->data = hls;
     hls->path->conf_file = cf->conf_file->file.name.data;
     hls->path->line = cf->conf_file->line;

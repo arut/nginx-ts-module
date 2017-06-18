@@ -19,6 +19,7 @@ typedef struct {
     ngx_msec_t             min_seg;
     ngx_msec_t             max_seg;
     ngx_msec_t             analyze;
+    size_t                 max_size;
     ngx_uint_t             nsegs;
 } ngx_ts_hls_conf_t;
 
