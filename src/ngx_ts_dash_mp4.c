@@ -10,6 +10,8 @@
 #include "ngx_ts_dash.h"
 
 
+#define NGX_TS_DASH_BUFFER_SIZE     1024
+
 #define NGX_TS_DASH_DEFAULT_WIDTH   400
 #define NGX_TS_DASH_DEFAULT_HEIGHT  400
 
@@ -20,6 +22,10 @@
  */
 
 
+static u_char *ngx_ts_dash_write_segment_meta(u_char *p,
+    ngx_ts_dash_rep_t *rep);
+static u_char *ngx_ts_dash_write_segment_data(u_char *p,
+    ngx_ts_dash_rep_t *rep);
 static u_char *ngx_ts_dash_box_styp(u_char *p);
 static u_char *ngx_ts_dash_box_sidx(u_char *p, ngx_ts_dash_rep_t *rep);
 static u_char *ngx_ts_dash_box_moof(u_char *p, ngx_ts_dash_rep_t *rep);
@@ -67,8 +73,15 @@ static u_char *ngx_ts_dash_desc_sl_conf(u_char *p);
 static u_char *ngx_ts_dash_desc(u_char *p, u_char tag);
 static u_char *ngx_ts_dash_desc_update(u_char *p, u_char *ps);
 
+static u_char *ngx_ts_dash_write64(u_char *p, uint64_t v);
+static u_char *ngx_ts_dash_write32(u_char *p, uint32_t v);
+static u_char *ngx_ts_dash_write16(u_char *p, uint16_t v);
+static uint32_t ngx_ts_dash_read32(u_char *p);
 
-u_char *
+static ngx_chain_t* ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash);
+
+
+static u_char *
 ngx_ts_dash_write_segment_meta(u_char *p, ngx_ts_dash_rep_t *rep)
 {
     p = ngx_ts_dash_box_styp(p);
@@ -79,7 +92,7 @@ ngx_ts_dash_write_segment_meta(u_char *p, ngx_ts_dash_rep_t *rep)
 }
 
 
-u_char *
+static u_char *
 ngx_ts_dash_write_segment_data(u_char *p, ngx_ts_dash_rep_t *rep)
 {
     return ngx_ts_dash_box_mdat(p, rep);
@@ -1147,7 +1160,7 @@ ngx_ts_dash_desc_update(u_char *p, u_char *ps)
 }
 
 
-u_char *
+static u_char *
 ngx_ts_dash_write64(u_char *p, uint64_t v)
 {
     *p++ = (u_char) (v >> 56);
@@ -1163,7 +1176,7 @@ ngx_ts_dash_write64(u_char *p, uint64_t v)
 }
 
 
-u_char *
+static u_char *
 ngx_ts_dash_write32(u_char *p, uint32_t v)
 {
     *p++ = (u_char) (v >> 24);
@@ -1175,7 +1188,7 @@ ngx_ts_dash_write32(u_char *p, uint32_t v)
 }
 
 
-u_char *
+static u_char *
 ngx_ts_dash_write16(u_char *p, uint16_t v)
 {
     *p++ = (u_char) (v >> 8);
@@ -1185,7 +1198,7 @@ ngx_ts_dash_write16(u_char *p, uint16_t v)
 }
 
 
-uint32_t
+static uint32_t
 ngx_ts_dash_read32(u_char *p)
 {
     uint32_t  v;
@@ -1196,4 +1209,234 @@ ngx_ts_dash_read32(u_char *p)
     v = (v << 8) + *p;
 
     return v;
+}
+
+
+ngx_int_t
+ngx_ts_dash_start_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
+{
+    ngx_buf_t  *b;
+
+    ngx_memzero(&rep->subs, sizeof(ngx_ts_dash_subs_t));
+
+    rep->nsamples = 0;
+    rep->nmeta = 0;
+    rep->ndata = 0;
+
+    /* buffer is big enough to fit initial metadata */
+
+    rep->meta = ngx_ts_dash_get_buffer(dash);
+    if (rep->meta == NULL) {
+        return NGX_ERROR;
+    }
+
+    rep->last_meta = rep->meta;
+
+    b = rep->meta->buf;
+
+    b->last = ngx_ts_dash_write_segment_meta(b->last, rep);
+
+    rep->data = ngx_ts_dash_get_buffer(dash);
+    if (rep->data == NULL) {
+        return NGX_ERROR;
+    }
+
+    rep->last_data = rep->data;
+
+    b = rep->data->buf;
+
+    b->last = ngx_ts_dash_write_segment_data(b->last, rep);
+
+    return NGX_OK;
+}
+
+
+ngx_chain_t *
+ngx_ts_dash_end_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
+{
+    uint32_t             traf, trun, moof, mdat;
+    ngx_chain_t         *out;
+    ngx_ts_dash_subs_t  *subs;
+
+    subs = &rep->subs;
+
+    ngx_ts_dash_write64(subs->pts, rep->seg_pts);
+    ngx_ts_dash_write64(subs->dts, rep->seg_dts);
+
+    ngx_ts_dash_write32(subs->seq, rep->seg);
+    ngx_ts_dash_write32(subs->nsamples, rep->nsamples);
+    ngx_ts_dash_write32(subs->duration, rep->es->dts - rep->seg_dts);
+
+    if (subs->sample_duration) {
+        ngx_ts_dash_write32(subs->sample_duration, rep->es->dts - rep->dts);
+    }
+
+    traf = ngx_ts_dash_read32(subs->traf) + rep->nmeta;
+    ngx_ts_dash_write32(subs->traf, traf);
+
+    trun = ngx_ts_dash_read32(subs->trun) + rep->nmeta;
+    ngx_ts_dash_write32(subs->trun, trun);
+
+    moof = ngx_ts_dash_read32(subs->moof) + rep->nmeta;
+    ngx_ts_dash_write32(subs->moof, moof);
+
+    mdat = ngx_ts_dash_read32(subs->mdat) + rep->ndata;
+    ngx_ts_dash_write32(subs->mdat, mdat);
+
+    ngx_ts_dash_write32(subs->moof_mdat, moof + mdat);
+    ngx_ts_dash_write32(subs->moof_data, moof + 8);
+
+    out = rep->meta;
+    rep->last_meta->next = rep->data;
+
+    rep->meta = NULL;
+    rep->data = NULL;
+    rep->last_meta = NULL;
+    rep->last_data = NULL;
+
+    return out;
+}
+
+
+void
+ngx_ts_dash_free_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
+    ngx_chain_t *out)
+{
+    ngx_chain_t  *cl;
+
+    for (cl = out; cl->next; cl = cl->next);
+
+    cl->next = dash->free;
+    dash->free = out;
+}
+
+
+ngx_int_t
+ngx_ts_dash_append_meta(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
+    size_t size, uint64_t dts)
+{
+    size_t        n;
+    u_char       *p;
+    ngx_buf_t    *b;
+    ngx_chain_t  *cl;
+    ngx_ts_es_t  *es;
+
+    es = rep->es;
+
+    rep->ndata += size;
+    rep->nsamples++;
+
+    n = es->video ? 16 : 8;
+
+    cl = rep->last_meta;
+    b = cl->buf;
+
+    if ((size_t) (b->end - b->last) < n) {
+        cl->next = ngx_ts_dash_get_buffer(dash);
+        if (cl->next == NULL) {
+            return NGX_ERROR;
+        }
+
+        cl = cl->next;
+        rep->last_meta = cl;
+        b = cl->buf;
+    }
+
+    p = b->last;
+    b->last += n;
+    rep->nmeta += n;
+
+    /* sample_duration */
+    if (rep->subs.sample_duration) {
+        ngx_ts_dash_write32(rep->subs.sample_duration, dts - rep->dts);
+    }
+
+    rep->subs.sample_duration = p;
+    p = ngx_ts_dash_write32(p, 0);
+
+    /* sample_size */
+    p = ngx_ts_dash_write32(p, size);
+
+    if (es->video) {
+        /*
+         * ISO/IEC 14496-12:2008(E)
+         * 8.8.3 Track Extends Box, Sample flags, p. 44
+         * sample_is_difference_sample for non-key sample
+         */
+
+        p = ngx_ts_dash_write32(p, es->rand ? 0x00000000 : 0x00010000);
+
+        /* sample_composition_time_offset */
+        ngx_ts_dash_write32(p, es->pts - es->dts);
+    }
+
+    rep->dts = dts;
+
+    return NGX_OK;
+}
+
+
+ngx_int_t
+ngx_ts_dash_append_data(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
+    u_char *data, size_t len)
+{
+    size_t        n;
+    ngx_chain_t  *cl;
+
+    cl = rep->last_data;
+
+    while (len) {
+        if (cl->buf->last == cl->buf->end) {
+            cl->next = ngx_ts_dash_get_buffer(dash);
+            if (cl->next == NULL) {
+                return NGX_ERROR;
+            }
+
+            cl = cl->next;
+            rep->last_data = cl;
+        }
+
+        n = ngx_min((size_t) (cl->buf->end - cl->buf->last), len);
+
+        cl->buf->last = ngx_cpymem(cl->buf->last, data, n);
+
+        data += n;
+        len -= n;
+    }
+
+    return NGX_OK;
+}
+
+
+static ngx_chain_t *
+ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash)
+{
+    ngx_buf_t    *b;
+    ngx_chain_t  *out;
+
+    if (dash->free) {
+        out = dash->free;
+        dash->free = out->next;
+        out->next = NULL;
+        b = out->buf;
+
+    } else {
+        out = ngx_alloc_chain_link(dash->ts->pool);
+        if (out == NULL) {
+            return NULL;
+        }
+
+        b = ngx_create_temp_buf(dash->ts->pool, NGX_TS_DASH_BUFFER_SIZE);
+        if (b == NULL) {
+            return NULL;
+        }
+
+        out->buf = b;
+        out->next = NULL;
+    }
+
+    b->pos = b->start;
+    b->last = b->start;
+
+    return out;
 }
