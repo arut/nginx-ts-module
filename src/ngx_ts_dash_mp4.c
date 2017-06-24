@@ -10,6 +10,10 @@
 #include "ngx_ts_dash.h"
 
 
+#define NGX_TS_DASH_DEFAULT_WIDTH   400
+#define NGX_TS_DASH_DEFAULT_HEIGHT  400
+
+
 /*
  * ISO base media file format
  * ISO/IEC 14496-12:2008(E)
@@ -501,10 +505,10 @@ ngx_ts_dash_box_tkhd(u_char *p, ngx_ts_dash_rep_t *rep)
     p = ngx_ts_dash_write32(p, 0x40000000);
 
     /* XXX width */
-    p = ngx_ts_dash_write32(p, 100 << 16);
+    p = ngx_ts_dash_write32(p, NGX_TS_DASH_DEFAULT_WIDTH << 16);
 
     /* XXX height */
-    p = ngx_ts_dash_write32(p, 100 << 16);
+    p = ngx_ts_dash_write32(p, NGX_TS_DASH_DEFAULT_HEIGHT << 16);
 
     return ngx_ts_dash_box_update(p, ps);
 }
@@ -792,10 +796,10 @@ ngx_ts_dash_box_video(u_char *p, ngx_ts_dash_rep_t *rep)
     p = ngx_ts_dash_write32(p, 0);
 
     /* XXX width */
-    p = ngx_ts_dash_write16(p, 100);
+    p = ngx_ts_dash_write16(p, NGX_TS_DASH_DEFAULT_WIDTH);
 
     /* XXX height */
-    p = ngx_ts_dash_write16(p, 100);
+    p = ngx_ts_dash_write16(p, NGX_TS_DASH_DEFAULT_HEIGHT);
 
     /* horizresolution */
     p = ngx_ts_dash_write32(p, 0x00480000);
@@ -1081,7 +1085,7 @@ ngx_ts_dash_desc_dec_spec(u_char *p, ngx_ts_dash_rep_t *rep)
     freq_index = (a[2] >> 2) & 0x0f;
     chan_conf = ((a[2] & 0x01) << 2) + (a[3] >> 6);
 
-    if (freq_index == 15) {
+    if (obj_type == 31 || freq_index == 15) {
         return p;
     }
 
