@@ -51,8 +51,8 @@ nginx.conf::
 
             location /publish/ {
                 ts;
-                ts_hls /var/hls segment=5s;
-                ts_dash /var/dash segment=5s;
+                ts_hls path=/var/hls segment=5s;
+                ts_dash path=/var/dash segment=5s;
 
                 client_max_body_size 0;
             }

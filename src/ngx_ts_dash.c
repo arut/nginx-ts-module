@@ -1222,7 +1222,7 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     char  *p = conf;
 
     ssize_t              max_size;
-    ngx_str_t           *value, s;
+    ngx_str_t           *value, s, path;
     ngx_int_t            v;
     ngx_uint_t           i, nsegs, clean;
     ngx_msec_t           min_seg, max_seg, analyze;
@@ -1234,27 +1234,9 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return "is duplicate";
     }
 
-    dash = ngx_pcalloc(cf->pool, sizeof(ngx_ts_dash_conf_t));
-    if (dash == NULL) {
-        return NGX_CONF_ERROR;
-    }
-
-    dash->path = ngx_pcalloc(cf->pool, sizeof(ngx_path_t));
-    if (dash->path == NULL) {
-        return NGX_CONF_ERROR;
-    }
-
     value = cf->args->elts;
 
-    dash->path->name = value[1];
-
-    if (dash->path->name.data[dash->path->name.len - 1] == '/') {
-        dash->path->name.len--;
-    }
-
-    if (ngx_conf_full_name(cf->cycle, &dash->path->name, 0) != NGX_OK) {
-        return NGX_CONF_ERROR;
-    }
+    ngx_str_null(&path);
 
     min_seg = 5000;
     max_seg = 0;
@@ -1263,7 +1245,23 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     nsegs = 6;
     clean = 1;
 
-    for (i = 2; i < cf->args->nelts; i++) {
+    for (i = 1; i < cf->args->nelts; i++) {
+
+        if (ngx_strncmp(value[i].data, "path=", 5) == 0) {
+
+            path.len = value[i].len - 5;
+            path.data = value[i].data + 5;
+
+            if (path.data[path.len - 1] == '/') {
+                path.len--;
+            }
+
+            if (ngx_conf_full_name(cf->cycle, &path, 0) != NGX_OK) {
+                return NGX_CONF_ERROR;
+            }
+
+            continue;
+        }
 
         if (ngx_strncmp(value[i].data, "segment=", 8) == 0) {
 
@@ -1353,6 +1351,24 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
                            "invalid parameter \"%V\"", &value[i]);
         return NGX_CONF_ERROR;
     }
+
+    if (path.len == 0) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "\"%V\" must have \"path\" parameter", &cmd->name);
+        return NGX_CONF_ERROR;
+    }
+
+    dash = ngx_pcalloc(cf->pool, sizeof(ngx_ts_dash_conf_t));
+    if (dash == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    dash->path = ngx_pcalloc(cf->pool, sizeof(ngx_path_t));
+    if (dash->path == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    dash->path->name = path;
 
     dash->min_seg = min_seg;
 
