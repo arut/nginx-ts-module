@@ -517,11 +517,11 @@ ngx_ts_dash_box_tkhd(u_char *p, ngx_ts_dash_rep_t *rep)
     p = ngx_ts_dash_write32(p, 0x00000000);
     p = ngx_ts_dash_write32(p, 0x40000000);
 
-    /* XXX width */
-    p = ngx_ts_dash_write32(p, NGX_TS_DASH_DEFAULT_WIDTH << 16);
+    p = ngx_ts_dash_write32(p, (rep->avc ? rep->avc->width
+                                         : NGX_TS_DASH_DEFAULT_WIDTH) << 16);
 
-    /* XXX height */
-    p = ngx_ts_dash_write32(p, NGX_TS_DASH_DEFAULT_HEIGHT << 16);
+    p = ngx_ts_dash_write32(p, (rep->avc ? rep->avc->height
+                                         : NGX_TS_DASH_DEFAULT_HEIGHT) << 16);
 
     return ngx_ts_dash_box_update(p, ps);
 }
@@ -808,11 +808,11 @@ ngx_ts_dash_box_video(u_char *p, ngx_ts_dash_rep_t *rep)
     p = ngx_ts_dash_write32(p, 0);
     p = ngx_ts_dash_write32(p, 0);
 
-    /* XXX width */
-    p = ngx_ts_dash_write16(p, NGX_TS_DASH_DEFAULT_WIDTH);
+    p = ngx_ts_dash_write16(p, rep->avc ? rep->avc->width
+                                        : NGX_TS_DASH_DEFAULT_WIDTH);
 
-    /* XXX height */
-    p = ngx_ts_dash_write16(p, NGX_TS_DASH_DEFAULT_HEIGHT);
+    p = ngx_ts_dash_write16(p, rep->avc ? rep->avc->height
+                                        : NGX_TS_DASH_DEFAULT_HEIGHT);
 
     /* horizresolution */
     p = ngx_ts_dash_write32(p, 0x00480000);
@@ -1081,9 +1081,7 @@ ngx_ts_dash_desc_dec_spec(u_char *p, ngx_ts_dash_rep_t *rep)
 {
     u_char  *ps = p;
 
-    u_char  *a, obj_type, freq_index, chan_conf;
-
-    if (rep->adts == NULL) {
+    if (rep->aac == NULL) {
         return p;
     }
 
@@ -1092,20 +1090,10 @@ ngx_ts_dash_desc_dec_spec(u_char *p, ngx_ts_dash_rep_t *rep)
      * https://wiki.multimedia.cx/index.php/MPEG-4_Audio#Audio_Specific_Config
      */
 
-    a = rep->adts;
-
-    obj_type = (a[2] >> 6) + 1;
-    freq_index = (a[2] >> 2) & 0x0f;
-    chan_conf = ((a[2] & 0x01) << 2) + (a[3] >> 6);
-
-    if (obj_type == 31 || freq_index == 15) {
-        return p;
-    }
-
     p = ngx_ts_dash_desc(p, 0x05);
 
-    *p++ = (obj_type << 3) + (freq_index >> 1);
-    *p++ = (freq_index << 7) + (chan_conf << 3);
+    *p++ = (rep->aac->profile << 3) + (rep->aac->freq_index >> 1);
+    *p++ = (rep->aac->freq_index << 7) + (rep->aac->chan << 3);
 
     return ngx_ts_dash_desc_update(p, ps);
 }

@@ -8,6 +8,8 @@
 #include <ngx_core.h>
 
 #include "ngx_ts_stream.h"
+#include "ngx_ts_avc.h"
+#include "ngx_ts_aac.h"
 
 
 #ifndef _NGX_TS_DASH_H_INCLUDED_
@@ -60,11 +62,13 @@ typedef struct {
     ngx_uint_t              bandwidth_bytes;
     uint64_t                bandwidth_dts;
 
-    u_char                 *adts;
     u_char                 *sps;
     u_char                 *pps;
     size_t                  sps_len;
     size_t                  pps_len;
+
+    ngx_ts_avc_params_t    *avc;
+    ngx_ts_aac_params_t    *aac;
 
     ngx_str_t               path;
     u_char                 *init_path;

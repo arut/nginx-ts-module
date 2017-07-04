@@ -394,8 +394,8 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
      * 5.3.4.2 Sample format, p. 15
      */
 
-    size_t        n, size, len, *plen;
-    u_char       *p, *s, *spec, **pspec, c, type, buf[4];
+    size_t        n, size, len;
+    u_char       *p, *s, *spec, c, type, buf[4];
     ngx_uint_t    z;
     ngx_chain_t  *cl;
 
@@ -453,10 +453,7 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
         }
 
         if (type == 7 || type == 8) {
-            pspec = (type == 7) ? &rep->sps : &rep->pps;
-            plen = (type == 7) ? &rep->sps_len : &rep->pps_len;
-
-            if (*pspec) {
+            if ((type == 7 && rep->sps) || (type == 8 && rep->pps)) {
                 continue;
             }
 
@@ -469,23 +466,51 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
                 return NGX_ERROR;
             }
 
-            *pspec = spec;
-            *plen = len;
+            if (type == 7) {
+                rep->sps = spec;
+                rep->sps_len = len;
 
-        } else {
-            spec = NULL;
-
-            buf[0] = len >> 24;
-            buf[1] = len >> 16;
-            buf[2] = len >> 8;
-            buf[3] = len;
-
-            if (ngx_ts_dash_append_data(dash, rep, buf, 4) != NGX_OK) {
-                return NGX_ERROR;
+            } else if (type == 8) {
+                rep->pps = spec;
+                rep->pps_len = len;
             }
 
-            size += 4;
+            while (len) {
+                if (s == cl->buf->last) {
+                    cl = cl->next;
+                    s = cl->buf->pos;
+                }
+
+                n = ngx_min((size_t) (cl->buf->last - s), len);
+
+                spec = ngx_cpymem(spec, s, n);
+
+                s += n;
+                len -= n;
+            }
+
+            if (rep->sps && rep->pps) {
+                rep->avc = ngx_ts_avc_decode_params(dash->ts,
+                                                    rep->sps, rep->sps_len,
+                                                    rep->pps, rep->pps_len);
+                if (rep->avc == NULL) {
+                    return NGX_ERROR;
+                }
+            }
+
+            continue;
         }
+
+        buf[0] = len >> 24;
+        buf[1] = len >> 16;
+        buf[2] = len >> 8;
+        buf[3] = len;
+
+        if (ngx_ts_dash_append_data(dash, rep, buf, 4) != NGX_OK) {
+            return NGX_ERROR;
+        }
+
+        size += 4;
 
         while (len) {
             if (s == cl->buf->last) {
@@ -495,17 +520,11 @@ ngx_ts_dash_copy_avc(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
 
             n = ngx_min((size_t) (cl->buf->last - s), len);
 
-            if (spec) {
-                spec = ngx_cpymem(spec, s, n);
-
-            } else {
-                if (ngx_ts_dash_append_data(dash, rep, s, n) != NGX_OK) {
-                    return  NGX_ERROR;
-                }
-
-                size += n;
+            if (ngx_ts_dash_append_data(dash, rep, s, n) != NGX_OK) {
+                return  NGX_ERROR;
             }
 
+            size += n;
             s += n;
             len -= n;
         }
@@ -538,12 +557,7 @@ ngx_ts_dash_copy_aac(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
     size_t       len, n;
     u_char      *p, adts[9];
     uint64_t     dts;
-    ngx_uint_t   f, i;
-
-    static ngx_uint_t  freq[] = {
-        96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
-        16000, 12000, 11025,  8000,  7350,     0,     0,     0
-    };
+    ngx_uint_t   i;
 
     if (in == NULL) {
         return NGX_OK;
@@ -581,13 +595,11 @@ ngx_ts_dash_copy_aac(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
             adts[n++] = *p++;
         }
 
-        if (rep->adts == NULL) {
-            rep->adts = ngx_pnalloc(dash->ts->pool, 7);
-            if (rep->adts == NULL) {
+        if (rep->aac == NULL) {
+            rep->aac = ngx_ts_aac_decode_params(dash->ts, adts, 7);
+            if (rep->aac == NULL) {
                 return NGX_ERROR;
             }
-
-            ngx_memcpy(rep->adts, adts, 7);
         }
 
         len = adts[3] & 0x02;
@@ -600,16 +612,10 @@ ngx_ts_dash_copy_aac(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
 
         len -= n;
 
-        f = freq[(adts[2] >> 2) & 0x0f];
-        if (f == 0) {
-            goto failed;
-        }
+        dts = rep->es->dts + (uint64_t) 90000 * 1024 * i++ / rep->aac->freq;
 
-        dts = rep->es->dts + (uint64_t) 90000 * 1024 * i++ / f;
-
-        ngx_log_debug4(NGX_LOG_DEBUG_CORE, dash->ts->log, 0,
-                       "ts dash AAC adts:%uz, frame:%uz, freq:%ui, ts:%uL",
-                       n, len, f, dts);
+        ngx_log_debug3(NGX_LOG_DEBUG_CORE, dash->ts->log, 0,
+                       "ts dash AAC adts:%uz, frame:%uz, ts:%uL", n, len, dts);
 
         if (ngx_ts_dash_append_meta(dash, rep, len, dts) != NGX_OK) {
             return NGX_ERROR;
@@ -1015,27 +1021,22 @@ ngx_ts_dash_format_datetime(u_char *p, time_t t)
 static void
 ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
 {
-    u_char       type;
-    ngx_uint_t   profile, compat, level, oti;
+    ngx_uint_t  oti;
 
-    type = rep->es->type;
-
-    if (type == NGX_TS_VIDEO_AVC && rep->sps_len >= 4) {
-        profile = rep->sps[1];
-        compat = rep->sps[2];
-        level = rep->sps[3];
-
-        ngx_sprintf(p, "avc1.%02uXi%02uXi%02uXi%Z", profile, compat, level);
+    if (rep->avc) {
+        ngx_sprintf(p, "avc1.%02uXi%02uXi%02uXi%Z",
+                    rep->avc->profile_idc,
+                    rep->avc->constraints,
+                    rep->avc->level_idc);
         return;
     }
 
-    if (type == NGX_TS_AUDIO_AAC && rep->adts) {
-        profile = (rep->adts[2] >> 6) + 1;
-        ngx_sprintf(p, "mp4a.40.%ui%Z", profile);
+    if (rep->aac) {
+        ngx_sprintf(p, "mp4a.40.%ui%Z", rep->aac->profile);
         return;
     }
 
-    oti = ngx_ts_dash_get_oti(type);
+    oti = ngx_ts_dash_get_oti(rep->es->type);
 
     ngx_sprintf(p, "mp4%c.%02uXi%Z", rep->es->video ? 'v' : 'a', oti);
 }
