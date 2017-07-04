@@ -36,8 +36,7 @@ Directives
 
 ======== =======
 ======== =======
-Syntax:  ``**ts_hls** path=*path* segment=*min*[:*max*] segments=*nummber* analyze=*duration* max_size=*size* [noclean]``
-Default: -
+Syntax:  **``ts_hls``** ``path=*path* segment=*min*[:*max*] segments=*nummber* analyze=*duration* max_size=*size* [noclean]``
 Context: location
 ======== =======
 
