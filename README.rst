@@ -1,5 +1,5 @@
 *************************
-Nginx MPEG-TS Live Module
+NGINX MPEG-TS Live Module
 *************************
 
 
@@ -38,8 +38,7 @@ Directives
 ==========
 
 ======== =======
-======== =======
-Syntax:  ``ts_hls path=*path* segment=*min*[:*max*] segments=*nummber* analyze=*duration* max_size=*size* [noclean]``
+Syntax:  ``ts_hls path=path segment=min[:max] segments=number analyze=duration max_size=size [noclean]``
 Context: location
 ======== =======
 
