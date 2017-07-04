@@ -38,6 +38,13 @@ Directives
 ==========
 
 ======== =======
+Syntax:  ``ts``
+Context: location
+======== =======
+
+Sets up the MPEG-TS handler for the location.
+
+======== =======
 Syntax:  ``ts_hls path=PATH segment=MIN[:MAX] segments=NUMBER analyze=DURATION max_size=SIZE [noclean]``
 Context: location
 ======== =======
