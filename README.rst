@@ -37,12 +37,23 @@ Things to do after downloading nginx:
 Directives
 ==========
 
-======== =======
+ts
+--
+
+======== ========
 Syntax:  ``ts``
 Context: location
-======== =======
+======== ========
 
-Sets up the MPEG-TS handler for the location.
+Sets up a MPEG-TS handler for the location.
+This directive is **required** for HLS or MPEG-DASH generation.
+
+By default, request body size is limited in nginx.
+To enable live streaming without size limitation, use the following nginx
+directive: ``client_max_body_size 0;``.
+
+ts_hls
+------
 
 ======== =======
 Syntax:  ``ts_hls path=PATH segment=MIN[:MAX] segments=NUMBER analyze=DURATION max_size=SIZE [noclean]``
