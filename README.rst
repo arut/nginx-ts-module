@@ -17,7 +17,7 @@ Features
 Compatibility
 =============
 
-- nginx version >= 1.11.5
+- **nginx** version >= 1.11.5
 
 
 Build
@@ -94,7 +94,7 @@ nginx.conf:
         }
     }
 
-HLS in HTML:
+**HLS** in HTML:
 
 .. code-block:: html
 
@@ -104,7 +104,7 @@ HLS in HTML:
       </video>
     </body>
 
-MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_:
+**MPEG-DASH** in HTML using the `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_:
 
 .. code-block:: html
 
@@ -123,13 +123,13 @@ MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Fo
       </div>
     </body>
 
-broadcast mp4 file:
+Broadcasting an mp4 file:
 
 .. code-block:: bash
 
     $ ffmpeg -re -i ~/Movies/sintel.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/publish/sintel
 
-broadcast multi-bitrate mp4 file:
+Broadcasting a multi-bitrate mp4 file:
 
 .. code-block:: bash
 
