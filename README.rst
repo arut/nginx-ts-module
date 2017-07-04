@@ -2,7 +2,8 @@
 Nginx MPEG-TS Live Module
 *************************
 
-The module is under development.
+
+.. contents::
 
 
 Features
@@ -25,10 +26,10 @@ Build
 Things to do after downloading nginx::
 
     # static module
-    > ./configure --add-module=/path/to/nginx-ts-module
+    $ ./configure --add-module=/path/to/nginx-ts-module
 
     # dynamic module
-    > ./configure --add-dynamic-module=/path/to/nginx-ts-module
+    $ ./configure --add-dynamic-module=/path/to/nginx-ts-module
 
 
 Directives
@@ -36,7 +37,7 @@ Directives
 
 ======== =======
 ======== =======
-Syntax:  **``ts_hls``** ``path=*path* segment=*min*[:*max*] segments=*nummber* analyze=*duration* max_size=*size* [noclean]``
+Syntax:  ``ts_hls path=*path* segment=*min*[:*max*] segments=*nummber* analyze=*duration* max_size=*size* [noclean]``
 Context: location
 ======== =======
 
@@ -116,8 +117,8 @@ MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Fo
 
 broadcast mp4 file::
 
-    ffmpeg -re -i ~/Movies/sintel.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/publish/sintel
+    $ ffmpeg -re -i ~/Movies/sintel.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/publish/sintel
 
 broadcast multi-bitrate mp4 file::
 
-    ffmpeg -re -i ~/Movies/sintel.mp4 -map 0:0 -map 0:1 -map 0:1 -c copy -bsf:v h264_mp4toannexb -program "st=0:st=1" -program "st=2" -f mpegts http://127.0.0.1:8000/publish/sintel
+    $ ffmpeg -re -i ~/Movies/sintel.mp4 -map 0:0 -map 0:1 -map 0:1 -c copy -bsf:v h264_mp4toannexb -program "st=0:st=1" -program "st=2" -f mpegts http://127.0.0.1:8000/publish/sintel
