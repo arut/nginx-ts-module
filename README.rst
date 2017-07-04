@@ -85,7 +85,7 @@ HLS in HTML::
       </video>
     </body>
 
-MPEG-DASH in HTML using the [dash.js player](https://github.com/Dash-Industry-Forum/dash.js) ::
+MPEG-DASH in HTML using the `dash.js player<https://github.com/Dash-Industry-Forum/dash.js>`_::
 
     <script src="http://cdn.dashjs.org/latest/dash.all.min.js"></script>
 
