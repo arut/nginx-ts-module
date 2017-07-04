@@ -50,7 +50,8 @@ This directive is **required** for HLS or MPEG-DASH generation.
 
 By default, request body size is limited in nginx.
 To enable live streaming without size limitation, use the directive
-``client_max_body_size 0;``.
+``client_max_body_size 0``.
+
 
 ts_hls
 ------
@@ -61,6 +62,17 @@ ts_hls
 ========== ========
 
 Enables generating live HLS in the location.
+
+
+ts_dash
+-------
+
+========== ========
+*Syntax:*  ``ts_dash path=PATH segment=MIN[:MAX] segments=NUMBER analyze=DURATION max_size=SIZE [noclean]``
+*Context:* location
+========== ========
+
+Enables generating live MPEG-DASH in the location.
 
 
 Example
