@@ -31,6 +31,20 @@ Things to do after downloading nginx::
     > ./configure --add-dynamic-module=/path/to/nginx-ts-module
 
 
+Directives
+==========
+
+-------- -------
+Syntax:  ts_hls path=*path* segment=*min*[:*max*] segments=*nummber* analyze=*duration* max_size=*size* [noclean]
+-------- -------
+Default: -
+-------- ------
+Context: location
+-------- -----
+
+Enables generating live HLS in the location.
+
+
 Example
 =======
 
