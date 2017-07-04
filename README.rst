@@ -23,7 +23,9 @@ Compatibility
 Build
 =====
 
-Things to do after downloading nginx::
+Things to do after downloading nginx:
+
+.. code-block:: bash
 
     # static module
     $ ./configure --add-module=/path/to/nginx-ts-module
@@ -47,7 +49,9 @@ Enables generating live HLS in the location.
 Example
 =======
 
-nginx.conf::
+nginx.conf:
+
+.. code-block:: javascript
 
     # nginx.conf
 
@@ -90,7 +94,9 @@ nginx.conf::
         }
     }
 
-HLS in HTML::
+HLS in HTML:
+
+.. code-block:: html
 
     <body>
       <video width="640" height="480" controls autoplay>
@@ -98,7 +104,9 @@ HLS in HTML::
       </video>
     </body>
 
-MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_::
+MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_:
+
+.. code-block:: html
 
     <script src="http://cdn.dashjs.org/latest/dash.all.min.js"></script>
 
@@ -115,10 +123,14 @@ MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Fo
       </div>
     </body>
 
-broadcast mp4 file::
+broadcast mp4 file:
+
+.. code-block:: bash
 
     $ ffmpeg -re -i ~/Movies/sintel.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/publish/sintel
 
-broadcast multi-bitrate mp4 file::
+broadcast multi-bitrate mp4 file:
+
+.. code-block:: bash
 
     $ ffmpeg -re -i ~/Movies/sintel.mp4 -map 0:0 -map 0:1 -map 0:1 -c copy -bsf:v h264_mp4toannexb -program "st=0:st=1" -program "st=2" -f mpegts http://127.0.0.1:8000/publish/sintel
