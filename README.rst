@@ -38,7 +38,7 @@ Directives
 ==========
 
 ======== =======
-Syntax:  ``ts_hls path=path segment=min[:max] segments=number analyze=duration max_size=size [noclean]``
+Syntax:  ``ts_hls path=PATH segment=MIN[:MAX] segments=NUMBER analyze=DURATION max_size=SIZE [noclean]``
 Context: location
 ======== =======
 
@@ -48,7 +48,7 @@ Enables generating live HLS in the location.
 Example
 =======
 
-nginx.conf:
+nginx.conf::
 
     # nginx.conf
 
