@@ -10,8 +10,8 @@ Features
 ========
 
 - receives MPEG-TS over HTTP
-- produces and manages Live HLS
-- produces and manages Live MPEG-DASH
+- produces and manages live HLS
+- produces and manages live MPEG-DASH
 
 
 Compatibility
@@ -23,7 +23,7 @@ Compatibility
 Build
 =====
 
-Things to do after downloading nginx:
+Building nginx with the module:
 
 .. code-block:: bash
 
@@ -45,10 +45,10 @@ ts
 *Context:* location
 ========== ========
 
-Sets up a MPEG-TS handler for the location.
+Sets up a live MPEG-TS handler for the location.
 This directive is **required** for HLS or MPEG-DASH generation.
 
-By default, request body size is limited in nginx.
+By default, HTTP request body size is limited in nginx.
 To enable live streaming without size limitation, use the directive
 ``client_max_body_size 0``.
 
@@ -57,7 +57,7 @@ ts_hls
 ------
 
 ========== ========
-*Syntax:*  ``ts_hls path=PATH segment=MIN[:MAX] segments=NUMBER analyze=DURATION max_size=SIZE [noclean]``
+*Syntax:*  ``ts_hls path=PATH [segment=MIN[:MAX]] [segments=NUMBER] [analyze=DURATION] [max_size=SIZE] [noclean]``
 *Context:* location
 ========== ========
 
@@ -68,7 +68,7 @@ ts_dash
 -------
 
 ========== ========
-*Syntax:*  ``ts_dash path=PATH segment=MIN[:MAX] segments=NUMBER analyze=DURATION max_size=SIZE [noclean]``
+*Syntax:*  ``ts_dash path=PATH [segment=MIN[:MAX]] [segments=NUMBER] [analyze=DURATION] [max_size=SIZE] [noclean]``
 *Context:* location
 ========== ========
 
