@@ -17,7 +17,7 @@ Features
 Compatibility
 =============
 
-- **nginx** version >= 1.11.5
+- `nginx <http://nginx.org>`_ version >= 1.11.5
 
 
 Build
@@ -50,8 +50,6 @@ Example
 =======
 
 nginx.conf:
-
-.. code-block:: javascript
 
     # nginx.conf
 
@@ -94,7 +92,7 @@ nginx.conf:
         }
     }
 
-**HLS** in HTML:
+HLS in HTML:
 
 .. code-block:: html
 
@@ -104,7 +102,7 @@ nginx.conf:
       </video>
     </body>
 
-**MPEG-DASH** in HTML using the `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_:
+MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_:
 
 .. code-block:: html
 
@@ -123,7 +121,7 @@ nginx.conf:
       </div>
     </body>
 
-Broadcasting an mp4 file:
+Broadcasting a simple mp4 file:
 
 .. code-block:: bash
 
