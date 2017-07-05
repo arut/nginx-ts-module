@@ -116,11 +116,55 @@ ts_dash
 -------
 
 ========== ========
-*Syntax:*  ``ts_dash path=PATH [segment=MIN[:MAX]] [segments=NUMBER] [analyze=DURATION] [max_size=SIZE] [noclean]``
+*Syntax:*  ``ts_dash path=PATH [segment=MIN[:MAX]] [segments=NUMBER] [max_size=SIZE] [noclean]``
 *Context:* location
 ========== ========
 
 Enables generating live MPEG-DASH in the location.
+The ``PATH`` parameter specifies a directory where MPEG-DASH manifest and
+segment files will be created.
+The directory is created if missing.
+For every publshed stream a subdirectory with the stream name is created under
+the ``PATH`` directory.
+The MPEG-DASH menifest file created in the stream subdirectory is named
+``index.mpd``.
+A path handler is installed to watch files in the directory.
+The old files in the directory are automatically deleted once they get old
+enough and are not supposed to be accessed by clients anymore.
+It is not allowed to reuse the path in other ``ts_hls`` or ``ts_dash``
+directives.
+
+The ``segment`` parameter specifies minimum and maximum segment durations.
+Normally, if a stream has video, segments are started at video key frames.
+If a key frame does not appear within ``MAX`` duration, the segment is
+truncated.
+The default value for minimum segment duration is 5 seconds.
+If unspecified, maximum segment duration is set to be twice as much as the
+minimum.
+
+  When setting an explicit value for the ``MAX`` parameter, the following
+  note should be taken into account.
+  If two segments following each other differ in duration by a factor more that
+  two, `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_
+  may run into busy cycle requesting the second segment over and over again.
+
+The ``segments`` parameter specifies the maximum number of segments in a
+manifest.
+As new segments are added to the menifest, the oldest segments are removed from
+it.
+
+The ``max_size`` parameter specifies the maximum size of a segment.
+A segment is truncated once it reaches this size.
+
+The ``noclean`` parameter indicates that the old files (segments and the
+playlist) should not be automatically removed.
+
+Example::
+
+    location / {
+        ts;
+        ts_dash path=/var/hls segment=10s;
+    }
 
 
 Example
