@@ -145,8 +145,8 @@ minimum.
   When setting an explicit value for the ``MAX`` parameter, the following
   note should be taken into account.
   If two segments following each other differ in duration by a factor more that
-  two, `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_
-  may run into busy cycle requesting the second segment over and over again.
+  two, dash.js_ may run into busy cycle requesting the second segment over and
+  over again.
 
 The ``segments`` parameter specifies the maximum number of segments in a
 manifest.
@@ -223,7 +223,7 @@ HLS in HTML:
       </video>
     </body>
 
-MPEG-DASH in HTML using the `dash.js player <https://github.com/Dash-Industry-Forum/dash.js>`_:
+MPEG-DASH in HTML using the dash.js_ player:
 
 .. code-block:: html
 
@@ -253,3 +253,6 @@ Broadcasting a multi-bitrate mp4 file:
 .. code-block:: bash
 
     $ ffmpeg -re -i ~/Movies/sintel.mp4 -map 0:0 -map 0:1 -map 0:1 -c copy -bsf:v h264_mp4toannexb -program "st=0:st=1" -program "st=2" -f mpegts http://127.0.0.1:8000/publish/sintel
+
+
+.. _dash.js: https://github.com/Dash-Industry-Forum/dash.js
