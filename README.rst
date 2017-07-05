@@ -10,8 +10,8 @@ Features
 ========
 
 - receives MPEG-TS over HTTP
-- produces and manages live HLS
-- produces and manages live MPEG-DASH
+- produces and manages live HLS_
+- produces and manages live MPEG-DASH_
 
 
 Compatibility
@@ -255,4 +255,6 @@ Broadcasting a multi-bitrate mp4 file:
     $ ffmpeg -re -i ~/Movies/sintel.mp4 -map 0:0 -map 0:1 -map 0:1 -c copy -bsf:v h264_mp4toannexb -program "st=0:st=1" -program "st=2" -f mpegts http://127.0.0.1:8000/publish/sintel
 
 
+.. _HLS: https://tools.ietf.org/html/draft-pantos-http-live-streaming-23
+.. _MPEG-DASH: https://en.wikipedia.org/wiki/Dynamic_Adaptive_Streaming_over_HTTP
 .. _dash.js: https://github.com/Dash-Industry-Forum/dash.js
