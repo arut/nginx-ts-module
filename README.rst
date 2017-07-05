@@ -157,7 +157,7 @@ The ``max_size`` parameter specifies the maximum size of a segment.
 A segment is truncated once it reaches this size.
 
 The ``noclean`` parameter indicates that the old files (segments and the
-playlist) should not be automatically removed.
+manifest) should not be automatically removed.
 
 Example::
 
