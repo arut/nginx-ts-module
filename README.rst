@@ -48,6 +48,16 @@ ts
 Sets up a live MPEG-TS handler for the location.
 This directive is **required** for HLS or MPEG-DASH generation.
 
+The last URI component is used as a stream name.
+For example, if the URI is ``/foo/bar/baz``, the stream name is ``baz``.
+
+A simple way to stream MPEG-TS is using ``ffmpeg``:
+
+.. code-block:: bash
+  
+    $ ffmpeg -re -i /path/to/foo.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/foo
+
+
 By default, HTTP request body size is limited in nginx.
 To enable live streaming without size limitation, use the directive
 ``client_max_body_size 0``.
@@ -62,6 +72,31 @@ ts_hls
 ========== ========
 
 Enables generating live HLS in the location.
+The ``PATH`` parameter specifies a directory where HLS files will be created.
+The directory is created if missing.
+A path handler is installed to watch files in the directory.
+The old files in the directory are automatically deleted once they get old
+enough and are not supposed to be accessed by clients anymore.
+It is not allowed to reuse the path in other ``ts_hls`` or ``ts_dash``
+directives.
+
+The ``segment`` parameter specifies minimum and maximum segment durations.
+Normally, if a stream has video, segments are started at key frames.
+If a video key frame does not appear until ``MAX`` duration is reached, the
+segment is truncated.
+The default value for minimum segment duration is 5 seconds.
+If unspecified, maximum segment duration is set to be twice as much as minimum.
+
+The ``segments`` parameter specifies the maximum number of segments in a
+playlist.
+As new segments are added to the playlist, the oldest segments are removed from
+it.
+
+The ``max_size`` parameter specifies the maximum size of a segment.
+A segment is truncated once it reaches this size.
+
+The ``noclean`` parameter indicates that the old files (segments and the
+playlist) should not be automatically removed.
 
 
 ts_dash
