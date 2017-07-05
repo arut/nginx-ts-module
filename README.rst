@@ -51,7 +51,7 @@ This directive is **required** for HLS or MPEG-DASH generation.
 The last URI component is used as a stream name.
 For example, if the URI is ``/foo/bar/baz``, the stream name is ``baz``.
 
-A simple way to stream MPEG-TS is using ``ffmpeg``:
+A simple way to stream MPEG-TS over HTTP is by running ``ffmpeg``:
 
 .. code-block:: bash
   
@@ -67,13 +67,18 @@ ts_hls
 ------
 
 ========== ========
-*Syntax:*  ``ts_hls path=PATH [segment=MIN[:MAX]] [segments=NUMBER] [analyze=DURATION] [max_size=SIZE] [noclean]``
+*Syntax:*  ``ts_hls path=PATH [segment=MIN[:MAX]] [segments=NUMBER] [max_size=SIZE] [noclean]``
 *Context:* location
 ========== ========
 
 Enables generating live HLS in the location.
-The ``PATH`` parameter specifies a directory where HLS files will be created.
+The ``PATH`` parameter specifies a directory where HLS playlist and segment
+files will be created.
 The directory is created if missing.
+For every publshed stream a subdirectory with the stream name is created under
+the ``PATH`` directory.
+The HLS playlist file created in the stream subdirectory is named
+``index.m3u8``.
 A path handler is installed to watch files in the directory.
 The old files in the directory are automatically deleted once they get old
 enough and are not supposed to be accessed by clients anymore.
@@ -81,11 +86,12 @@ It is not allowed to reuse the path in other ``ts_hls`` or ``ts_dash``
 directives.
 
 The ``segment`` parameter specifies minimum and maximum segment durations.
-Normally, if a stream has video, segments are started at key frames.
-If a video key frame does not appear until ``MAX`` duration is reached, the
-segment is truncated.
+Normally, if a stream has video, segments are started at video key frames.
+If a key frame does not appear within ``MAX`` duration, the segment is
+truncated.
 The default value for minimum segment duration is 5 seconds.
-If unspecified, maximum segment duration is set to be twice as much as minimum.
+If unspecified, maximum segment duration is set to be twice as much as the
+minimum.
 
 The ``segments`` parameter specifies the maximum number of segments in a
 playlist.
@@ -97,6 +103,13 @@ A segment is truncated once it reaches this size.
 
 The ``noclean`` parameter indicates that the old files (segments and the
 playlist) should not be automatically removed.
+
+Example::
+
+    location / {
+        ts;
+        ts_hls path=/var/hls segment=10s;
+    }
 
 
 ts_dash
