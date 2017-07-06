@@ -107,6 +107,8 @@ typedef struct {
     ngx_chain_t            *free;
     ngx_ts_dash_set_t      *sets;
     ngx_uint_t              nsets;
+
+    ngx_uint_t              flush;  /* unsigned  flush:1; */
 } ngx_ts_dash_t;
 
 

@@ -117,16 +117,28 @@ ngx_ts_dash_cleanup(void *data)
 {
     ngx_ts_dash_t *dash = data;
 
-    ngx_ts_stream_t  *ts;
+    ngx_uint_t          i, j;
+    ngx_ts_stream_t    *ts;
+    ngx_ts_dash_set_t  *set;
+    ngx_ts_dash_rep_t  *rep;
 
     ts = dash->ts;
 
     ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash cleanup");
 
-    /*XXX*/
+    dash->flush = 1;
 
-    (void) dash;
-    (void) ts;
+    for (i = 0; i < dash->nsets; i++) {
+        set = &dash->sets[i];
+
+        for (j = 0; j < set->nreps; j++) {
+            rep =  &set->reps[j];
+
+            if (ngx_ts_dash_close_segment(dash, rep) != NGX_OK) {
+                return;
+            }
+        }
+    }
 }
 
 
@@ -699,16 +711,18 @@ ngx_ts_dash_close_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     max_seg = (int64_t) dash->conf->max_seg * 90;
     max_size = dash->conf->max_size;
 
-    if (d < min_seg
-        || (d < max_seg && es->video && !es->rand))
-    {
-        if (max_size == 0 || rep->nmeta + rep->ndata < max_size) {
-            return NGX_OK;
-        }
+    if (!dash->flush) {
+        if (d < min_seg
+            || (d < max_seg && es->video && !es->rand))
+        {
+            if (max_size == 0 || rep->nmeta + rep->ndata < max_size) {
+                return NGX_OK;
+            }
 
-        ngx_log_error(NGX_LOG_WARN, ts->log, 0,
-                      "closing DASH segment \"%V%uL.mp4\" on size limit",
-                      &rep->path, rep->seg_dts);
+            ngx_log_error(NGX_LOG_WARN, ts->log, 0,
+                          "closing DASH segment \"%V%uL.mp4\" on size limit",
+                          &rep->path, rep->seg_dts);
+        }
     }
 
     path = &rep->path;
