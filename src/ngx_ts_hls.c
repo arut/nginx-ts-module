@@ -825,7 +825,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     char  *p = conf;
 
     ssize_t             max_size;
-    ngx_str_t          *value, s, path;
+    ngx_str_t          *value, s, ss, path;
     ngx_int_t           v;
     ngx_uint_t          i, nsegs, clean;
     ngx_msec_t          min_seg, max_seg, analyze;
@@ -842,7 +842,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_str_null(&path);
 
     min_seg = 5000;
-    max_seg = 0;
+    max_seg = 10000;
     analyze = 0;
     max_size = 16 * 1024 * 1024;
     nsegs = 6;
@@ -871,6 +871,14 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             s.len = value[i].len - 8;
             s.data = value[i].data + 8;
 
+            ss.data = (u_char *) ngx_strchr(s.data, ':');
+
+            if (ss.data) {
+                ss.len = s.data + s.len - ss.data - 1;
+                s.len = ss.data - s.data;
+                ss.data++;
+            }
+
             min_seg = ngx_parse_time(&s, 0);
             if (min_seg == (ngx_msec_t) NGX_ERROR) {
                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
@@ -879,20 +887,17 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
                 return NGX_CONF_ERROR;
             }
 
-            continue;
-        }
+            if (ss.data) {
+                max_seg = ngx_parse_time(&ss, 0);
+                if (max_seg == (ngx_msec_t) NGX_ERROR) {
+                    ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                       "invalid segment duration value \"%V\"",
+                                       &value[i]);
+                    return NGX_CONF_ERROR;
+                }
 
-        if (ngx_strncmp(value[i].data, "max_segment=", 12) == 0) {
-
-            s.len = value[i].len - 12;
-            s.data = value[i].data + 12;
-
-            max_seg = ngx_parse_time(&s, 0);
-            if (max_seg == (ngx_msec_t) NGX_ERROR) {
-                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                                   "invalid max segment duration value \"%V\"",
-                                   &value[i]);
-                return NGX_CONF_ERROR;
+            } else {
+                max_seg = min_seg * 2;
             }
 
             continue;
@@ -930,7 +935,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
-        if (ngx_strncmp(value[i].data, "segments=", 7) == 0) {
+        if (ngx_strncmp(value[i].data, "segments=", 9) == 0) {
 
             v = ngx_atoi(value[i].data + 9, value[i].len - 9);
             if (v == NGX_ERROR) {
@@ -974,7 +979,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     hls->path->name = path;
 
     hls->min_seg = min_seg;
-    hls->max_seg = max_seg ? max_seg : min_seg * 2;
+    hls->max_seg = max_seg;
     hls->analyze = analyze ? analyze : min_seg * 2;
     hls->max_size = max_size;
     hls->nsegs = nsegs;
