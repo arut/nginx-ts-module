@@ -86,7 +86,7 @@ It is not allowed to reuse the path in other ``ts_hls`` or ``ts_dash``
 directives.
 
 The ``segment`` parameter specifies minimum and maximum segment durations.
-Normally, if a stream has video, segments are started at video key frames.
+If the stream has video, segments are started at video key frames.
 If a key frame does not appear within ``MAX`` duration, the segment is
 truncated.
 The default value for minimum segment duration is 5 seconds.
@@ -135,7 +135,7 @@ It is not allowed to reuse the path in other ``ts_hls`` or ``ts_dash``
 directives.
 
 The ``segment`` parameter specifies minimum and maximum segment durations.
-Normally, if a stream has video, segments are started at video key frames.
+If the stream has video, segments are started at video key frames.
 If a key frame does not appear within ``MAX`` duration, the segment is
 truncated.
 The default value for minimum segment duration is 5 seconds.
