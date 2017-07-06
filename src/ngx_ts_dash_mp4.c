@@ -1346,6 +1346,7 @@ ngx_ts_dash_append_meta(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
     p = ngx_ts_dash_write32(p, size);
 
     if (es->video) {
+
         /*
          * ISO/IEC 14496-12:2008(E)
          * 8.8.3 Track Extends Box, Sample flags, p. 44
