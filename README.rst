@@ -55,7 +55,7 @@ A simple way to stream MPEG-TS over HTTP is by running ``ffmpeg``:
 
 .. code-block:: bash
   
-    $ ffmpeg -re -i /path/to/foo.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/foo
+    $ ffmpeg ... -f mpegts http://127.0.0.1:8000/foo
 
 
 By default, HTTP request body size is limited in nginx.
@@ -102,7 +102,7 @@ The ``max_size`` parameter specifies the maximum size of a segment.
 A segment is truncated once it reaches this size.
 
 The ``noclean`` parameter indicates that the old files (segments and the
-playlist) should not be automatically removed.
+playlist) should not be automatically deleted from disk.
 
 Example::
 
@@ -126,7 +126,7 @@ segment files will be created.
 The directory is created if missing.
 For every publshed stream a subdirectory with the stream name is created under
 the ``PATH`` directory.
-The MPEG-DASH menifest file created in the stream subdirectory is named
+The MPEG-DASH manifest file created in the stream subdirectory is named
 ``index.mpd``.
 A path handler is installed to watch files in the directory.
 The old files in the directory are automatically deleted once they get old
@@ -145,19 +145,19 @@ minimum.
   When setting an explicit value for the ``MAX`` parameter, the following
   note should be taken into account.
   If the next segment is shorter than the previous one by a factor more that
-  two, dash.js_ may end up in a busy cycle requesting the second segment over
+  two, dash.js_ can end up in a busy cycle requesting the second segment over
   and over again.
 
 The ``segments`` parameter specifies the maximum number of segments in a
 manifest.
-As new segments are added to the menifest, the oldest segments are removed from
+As new segments are added to the manifest, the oldest segments are removed from
 it.
 
 The ``max_size`` parameter specifies the maximum size of a segment.
 A segment is truncated once it reaches this size.
 
 The ``noclean`` parameter indicates that the old files (segments and the
-manifest) should not be automatically removed.
+manifest) should not be automatically deleted from disk.
 
 Example::
 
@@ -187,8 +187,8 @@ nginx.conf::
 
             location /publish/ {
                 ts;
-                ts_hls path=/var/hls segment=5s;
-                ts_dash path=/var/dash segment=5s;
+                ts_hls path=/var/hls segment=10s;
+                ts_dash path=/var/dash segment=10s;
 
                 client_max_body_size 0;
             }
