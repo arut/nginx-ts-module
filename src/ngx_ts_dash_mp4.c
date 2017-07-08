@@ -22,254 +22,236 @@
  */
 
 
-static u_char *ngx_ts_dash_write_segment_meta(u_char *p,
-    ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_write_segment_data(u_char *p,
-    ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_styp(u_char *p);
-static u_char *ngx_ts_dash_box_sidx(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_moof(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_mfhd(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_traf(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_tfhd(u_char *p);
-static u_char *ngx_ts_dash_box_tfdt(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_trun(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_mdat(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_ftyp(u_char *p);
-static u_char *ngx_ts_dash_box_moov(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_mvhd(u_char *p);
-static u_char *ngx_ts_dash_box_mvex(u_char *p);
-static u_char *ngx_ts_dash_box_trex(u_char *p);
-static u_char *ngx_ts_dash_box_trak(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_tkhd(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_mdia(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_mdhd(u_char *p);
-static u_char *ngx_ts_dash_box_hdlr(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_minf(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_vmhd(u_char *p);
-static u_char *ngx_ts_dash_box_smhd(u_char *p);
-static u_char *ngx_ts_dash_box_dinf(u_char *p);
-static u_char *ngx_ts_dash_box_dref(u_char *p);
-static u_char *ngx_ts_dash_box_url(u_char *p);
-static u_char *ngx_ts_dash_box_stbl(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_stts(u_char *p);
-static u_char *ngx_ts_dash_box_stsc(u_char *p);
-static u_char *ngx_ts_dash_box_stsz(u_char *p);
-static u_char *ngx_ts_dash_box_stco(u_char *p);
-static u_char *ngx_ts_dash_box_stsd(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_video(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_audio(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_avcc(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box_esds(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_box(u_char *p, const char type[4]);
-static u_char *ngx_ts_dash_box_full(u_char *p, const char type[4],
+static void ngx_ts_dash_box_styp(ngx_buf_t *b);
+static void ngx_ts_dash_box_sidx(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_moof(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_mfhd(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_traf(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_tfhd(ngx_buf_t *b);
+static void ngx_ts_dash_box_tfdt(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_trun(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_mdat(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_ftyp(ngx_buf_t *b);
+static void ngx_ts_dash_box_moov(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_mvhd(ngx_buf_t *b);
+static void ngx_ts_dash_box_mvex(ngx_buf_t *b);
+static void ngx_ts_dash_box_trex(ngx_buf_t *b);
+static void ngx_ts_dash_box_trak(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_tkhd(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_mdia(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_mdhd(ngx_buf_t *b);
+static void ngx_ts_dash_box_hdlr(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_minf(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_vmhd(ngx_buf_t *b);
+static void ngx_ts_dash_box_smhd(ngx_buf_t *b);
+static void ngx_ts_dash_box_dinf(ngx_buf_t *b);
+static void ngx_ts_dash_box_dref(ngx_buf_t *b);
+static void ngx_ts_dash_box_url(ngx_buf_t *b);
+static void ngx_ts_dash_box_stbl(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_stts(ngx_buf_t *b);
+static void ngx_ts_dash_box_stsc(ngx_buf_t *b);
+static void ngx_ts_dash_box_stsz(ngx_buf_t *b);
+static void ngx_ts_dash_box_stco(ngx_buf_t *b);
+static void ngx_ts_dash_box_stsd(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_video(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_audio(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_avcc(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_box_esds(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+
+static u_char *ngx_ts_dash_box(ngx_buf_t *b, const char type[4]);
+static u_char *ngx_ts_dash_box_full(ngx_buf_t *b, const char type[4],
     u_char version, uint32_t flags);
-static u_char *ngx_ts_dash_box_update(u_char *p, u_char *ps);
+static void ngx_ts_dash_box_update(ngx_buf_t *b, u_char *p);
 
-static u_char *ngx_ts_dash_desc_es(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_desc_dec_conf(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_desc_dec_spec(u_char *p, ngx_ts_dash_rep_t *rep);
-static u_char *ngx_ts_dash_desc_sl_conf(u_char *p);
-static u_char *ngx_ts_dash_desc(u_char *p, u_char tag);
-static u_char *ngx_ts_dash_desc_update(u_char *p, u_char *ps);
+static void ngx_ts_dash_desc_es(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_desc_dec_conf(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_desc_dec_spec(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
+static void ngx_ts_dash_desc_sl_conf(ngx_buf_t *b);
 
-static u_char *ngx_ts_dash_write64(u_char *p, uint64_t v);
-static u_char *ngx_ts_dash_write32(u_char *p, uint32_t v);
-static u_char *ngx_ts_dash_write16(u_char *p, uint16_t v);
-static uint32_t ngx_ts_dash_read32(u_char *p);
+static u_char *ngx_ts_dash_desc(ngx_buf_t *b, u_char tag);
+static void ngx_ts_dash_desc_update(ngx_buf_t *b, u_char *p);
 
-static ngx_chain_t* ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash);
+static void ngx_ts_dash_cpymem(ngx_buf_t *b, const void *data, size_t size);
+static void ngx_ts_dash_write64(ngx_buf_t *b, uint64_t v);
+static void ngx_ts_dash_write32(ngx_buf_t *b, uint32_t v);
+static void ngx_ts_dash_write24(ngx_buf_t *b, uint32_t v);
+static void ngx_ts_dash_write16(ngx_buf_t *b, uint16_t v);
+static void ngx_ts_dash_write8(ngx_buf_t *b, u_char v);
+
+static void ngx_ts_dash_set_sub(ngx_buf_t *b, u_char **p);
+static uint32_t ngx_ts_dash_get32(u_char *p);
+static void ngx_ts_dash_put32(u_char *p, uint32_t v);
+static void ngx_ts_dash_put64(u_char *p, uint64_t v);
+
+static ngx_chain_t *ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash);
 
 
-static u_char *
-ngx_ts_dash_write_segment_meta(u_char *p, ngx_ts_dash_rep_t *rep)
+void
+ngx_ts_dash_write_init_segment(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    p = ngx_ts_dash_box_styp(p);
-    p = ngx_ts_dash_box_sidx(p, rep);
-    p = ngx_ts_dash_box_moof(p, rep);
-
-    return p;
+    ngx_ts_dash_box_ftyp(b);
+    ngx_ts_dash_box_moov(b, rep);
 }
 
 
-static u_char *
-ngx_ts_dash_write_segment_data(u_char *p, ngx_ts_dash_rep_t *rep)
-{
-    return ngx_ts_dash_box_mdat(p, rep);
-}
-
-
-u_char *
-ngx_ts_dash_write_init_segment(u_char *p, ngx_ts_dash_rep_t *rep)
-{
-    /* XXX watch buffer size! */
-
-    p = ngx_ts_dash_box_ftyp(p);
-    p = ngx_ts_dash_box_moov(p, rep);
-
-    return p;
-}
-
-
-static u_char *
-ngx_ts_dash_box_styp(u_char *p)
+static void
+ngx_ts_dash_box_styp(ngx_buf_t *b)
 {
     /* TODO
      * ETSI TS 126 244 V12.3.0 (2014-10)
      * 13.2 Segment types, p. 52
      */
 
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "styp");
+    p = ngx_ts_dash_box(b, "styp");
 
     /* major_brand */
-    p = ngx_cpymem(p, "iso6", 4); /* XXX 3gh9 */
+    ngx_ts_dash_cpymem(b, "iso6", 4); /* XXX 3gh9 */
 
     /* TODO version */
     /* minor_version */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
     /* TODO brands */
     /* compatible_brands */
-    p = ngx_cpymem(p, "isom", 4);
-    p = ngx_cpymem(p, "iso6", 4);
-    p = ngx_cpymem(p, "dash", 4);
+    ngx_ts_dash_cpymem(b, "isom", 4);
+    ngx_ts_dash_cpymem(b, "iso6", 4);
+    ngx_ts_dash_cpymem(b, "dash", 4);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_sidx(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_sidx(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
     /* TODO
      * ETSI TS 126 244 V12.3.0 (2014-10)
      * 13.4 Segment Index Box, p. 53
      */
 
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "sidx", 1, 0);
+    p = ngx_ts_dash_box_full(b, "sidx", 1, 0);
 
     /* reference_ID */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
     /* timescale */
-    p = ngx_ts_dash_write32(p, 90000);
+    ngx_ts_dash_write32(b, 90000);
 
     /* earliest_presentation_time */
-    rep->subs.pts = p;
-    p = ngx_ts_dash_write64(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.pts);
+    ngx_ts_dash_write64(b, 0);
 
     /* first_offset */
-    p = ngx_ts_dash_write64(p, 0);
+    ngx_ts_dash_write64(b, 0);
 
     /* reference_count */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
     /* referenced_size */
-    rep->subs.moof_mdat = p;
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.moof_mdat);
+    ngx_ts_dash_write32(b, 0);
 
     /* subsegment_duration */
-    rep->subs.duration = p;
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.duration);
+    ngx_ts_dash_write32(b, 0);
 
     /* starts_with_SAP, SAP_type, SAP_delta_time */
-    p = ngx_ts_dash_write32(p, 0x80000000);
+    ngx_ts_dash_write32(b, 0x80000000);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_moof(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_moof(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    rep->subs.moof = p;
+    ngx_ts_dash_set_sub(b, &rep->subs.moof);
 
-    p = ngx_ts_dash_box(p, "moof");
+    p = ngx_ts_dash_box(b, "moof");
 
-    p = ngx_ts_dash_box_mfhd(p, rep);
-    p = ngx_ts_dash_box_traf(p, rep);
+    ngx_ts_dash_box_mfhd(b, rep);
+    ngx_ts_dash_box_traf(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_mfhd(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_mfhd(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "mfhd", 0, 0);
+    p = ngx_ts_dash_box_full(b, "mfhd", 0, 0);
 
     /* sequence_number */
-    rep->subs.seq = p;
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.seq);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_traf(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_traf(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    rep->subs.traf = p;
+    ngx_ts_dash_set_sub(b, &rep->subs.traf);
 
-    p = ngx_ts_dash_box(p, "traf");
+    p = ngx_ts_dash_box(b, "traf");
 
-    p = ngx_ts_dash_box_tfhd(p);
-    p = ngx_ts_dash_box_tfdt(p, rep);
-    p = ngx_ts_dash_box_trun(p, rep);
+    ngx_ts_dash_box_tfhd(b);
+    ngx_ts_dash_box_tfdt(b, rep);
+    ngx_ts_dash_box_trun(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_tfhd(u_char *p)
+static void
+ngx_ts_dash_box_tfhd(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "tfhd", 0, 0);
+    p = ngx_ts_dash_box_full(b, "tfhd", 0, 0);
 
     /* track_ID */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_tfdt(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_tfdt(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
     /* 
      * ETSI TS 126 244 V12.3.0 (2014-10)
      * 13.5 Track Fragment Decode Time Box, p. 55
      */
 
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "tfdt", 1, 0);
+    p = ngx_ts_dash_box_full(b, "tfdt", 1, 0);
 
     /* baseMediaDecodeTime */
-    rep->subs.dts = p;
-    p = ngx_ts_dash_write64(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.dts);
+    ngx_ts_dash_write64(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_trun(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_trun(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
-
+    u_char    *p;
     uint32_t   flags;
 
     flags = 0x000001         /* data-offset-present */
@@ -281,633 +263,623 @@ ngx_ts_dash_box_trun(u_char *p, ngx_ts_dash_rep_t *rep)
                 | 0x000800;  /* sample-composition-time-offset-present */
     }
 
-    rep->subs.trun = p;
+    ngx_ts_dash_set_sub(b, &rep->subs.trun);
 
-    ps = p;
-
-    p = ngx_ts_dash_box_full(p, "trun", 0, flags);
+    p = ngx_ts_dash_box_full(b, "trun", 0, flags);
 
     /* sample_count */
-    rep->subs.nsamples = p;
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.nsamples);
+    ngx_ts_dash_write32(b, 0);
 
     /* data_offset */
-    rep->subs.moof_data = p;
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.moof_data);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_mdat(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_mdat(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
+    u_char  *p;
 
-    u_char  *ps = p;
+    ngx_ts_dash_set_sub(b, &rep->subs.mdat);
 
-    rep->subs.mdat = p;
+    p = ngx_ts_dash_box(b, "mdat");
 
-    p = ngx_ts_dash_box(p, "mdat");
-
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_ftyp(u_char *p)
+static void
+ngx_ts_dash_box_ftyp(ngx_buf_t *b)
 {
     /*
      * ISO/IEC 14496-12:2008(E)
      * 4.3 File Type Box, p. 4
      */
 
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "ftyp");
+    p = ngx_ts_dash_box(b, "ftyp");
 
     /* major_brand */
-    p = ngx_cpymem(p, "iso6", 4);
+    ngx_ts_dash_cpymem(b, "iso6", 4);
 
     /* minor_version */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
     /* TODO brands */
     /* compatible_brands */
-    p = ngx_cpymem(p, "isom", 4);
-    p = ngx_cpymem(p, "iso6", 4);
-    p = ngx_cpymem(p, "dash", 4);
+    ngx_ts_dash_cpymem(b, "isom", 4);
+    ngx_ts_dash_cpymem(b, "iso6", 4);
+    ngx_ts_dash_cpymem(b, "dash", 4);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_moov(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_moov(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "moov");
+    p = ngx_ts_dash_box(b, "moov");
 
-    p = ngx_ts_dash_box_mvhd(p);
-    p = ngx_ts_dash_box_mvex(p);
-    p = ngx_ts_dash_box_trak(p, rep);
+    ngx_ts_dash_box_mvhd(b);
+    ngx_ts_dash_box_mvex(b);
+    ngx_ts_dash_box_trak(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_mvhd(u_char *p)
+static void
+ngx_ts_dash_box_mvhd(ngx_buf_t *b)
 {
-    u_char  *ps = p;
-
+    u_char  *p;
     time_t   now;
 
-    ps = p;
-
-    p = ngx_ts_dash_box_full(p, "mvhd", 0, 0);
+    p = ngx_ts_dash_box_full(b, "mvhd", 0, 0);
 
     now = ngx_time();
 
     /* creation_time */
-    p = ngx_ts_dash_write32(p, now);
+    ngx_ts_dash_write32(b, now);
 
     /* modification_time */
-    p = ngx_ts_dash_write32(p, now);
+    ngx_ts_dash_write32(b, now);
 
     /* timescale */
-    p = ngx_ts_dash_write32(p, 90000);
+    ngx_ts_dash_write32(b, 90000);
 
     /* duration */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* rate */
-    p = ngx_ts_dash_write32(p, 0x00010000);
+    ngx_ts_dash_write32(b, 0x00010000);
 
     /* volume */
-    p = ngx_ts_dash_write32(p, 0x01000000);
+    ngx_ts_dash_write32(b, 0x01000000);
 
     /* reserved */
-    p = ngx_ts_dash_write64(p, 0);
+    ngx_ts_dash_write64(b, 0);
 
     /* matrix */
-    p = ngx_ts_dash_write32(p, 0x00010000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00010000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x40000000);
+    ngx_ts_dash_write32(b, 0x00010000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00010000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x40000000);
 
     /* pre_defined */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* next_track_ID */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_mvex(u_char *p)
+static void
+ngx_ts_dash_box_mvex(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "mvex");
+    p = ngx_ts_dash_box(b, "mvex");
 
-    p = ngx_ts_dash_box_trex(p);
+    ngx_ts_dash_box_trex(b);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_trex(u_char *p)
+static void
+ngx_ts_dash_box_trex(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "trex", 0, 0);
+    p = ngx_ts_dash_box_full(b, "trex", 0, 0);
 
     /* track_ID */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
     /* default_sample_description_index */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
     /* default_sample_duration */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* default_sample_size */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* default_sample_flags */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_trak(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_trak(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "trak");
+    p = ngx_ts_dash_box(b, "trak");
 
-    p = ngx_ts_dash_box_tkhd(p, rep);
-    p = ngx_ts_dash_box_mdia(p, rep);
+    ngx_ts_dash_box_tkhd(b, rep);
+    ngx_ts_dash_box_mdia(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_tkhd(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_tkhd(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
-
+    u_char  *p;
     time_t   now;
 
     /* flags: Track_enabled (0x01), Track_in_movie (0x02) */
-    p = ngx_ts_dash_box_full(p, "tkhd", 0, 0x03);
+    p = ngx_ts_dash_box_full(b, "tkhd", 0, 0x03);
 
     now = ngx_time();
 
     /* creation_time */
-    p = ngx_ts_dash_write32(p, now);
+    ngx_ts_dash_write32(b, now);
 
     /* modification_time */
-    p = ngx_ts_dash_write32(p, now);
+    ngx_ts_dash_write32(b, now);
 
     /* track_ID */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
     /* reserved */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* duration */
-    p = ngx_ts_dash_write32(p, 0xffffffff);
+    ngx_ts_dash_write32(b, 0xffffffff);
 
     /* reserved */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* layer, alternate_group */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* volume */
-    p = ngx_ts_dash_write32(p, rep->es->video ? 0x00000000 : 0x01000000);
+    ngx_ts_dash_write32(b, rep->es->video ? 0x00000000 : 0x01000000);
 
     /* matrix */
-    p = ngx_ts_dash_write32(p, 0x00010000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00010000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x00000000);
-    p = ngx_ts_dash_write32(p, 0x40000000);
+    ngx_ts_dash_write32(b, 0x00010000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00010000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x00000000);
+    ngx_ts_dash_write32(b, 0x40000000);
 
-    p = ngx_ts_dash_write32(p, (rep->avc ? rep->avc->width
-                                         : NGX_TS_DASH_DEFAULT_WIDTH) << 16);
+    ngx_ts_dash_write32(b, (rep->avc ? rep->avc->width
+                                     : NGX_TS_DASH_DEFAULT_WIDTH) << 16);
 
-    p = ngx_ts_dash_write32(p, (rep->avc ? rep->avc->height
-                                         : NGX_TS_DASH_DEFAULT_HEIGHT) << 16);
+    ngx_ts_dash_write32(b, (rep->avc ? rep->avc->height
+                                     : NGX_TS_DASH_DEFAULT_HEIGHT) << 16);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_mdia(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_mdia(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "mdia");
+    p = ngx_ts_dash_box(b, "mdia");
 
-    p = ngx_ts_dash_box_mdhd(p);
-    p = ngx_ts_dash_box_hdlr(p, rep);
-    p = ngx_ts_dash_box_minf(p, rep);
+    ngx_ts_dash_box_mdhd(b);
+    ngx_ts_dash_box_hdlr(b, rep);
+    ngx_ts_dash_box_minf(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_mdhd(u_char *p)
+static void
+ngx_ts_dash_box_mdhd(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
     time_t   now;
 
-    p = ngx_ts_dash_box_full(p, "mdhd", 0, 0);
+    p = ngx_ts_dash_box_full(b, "mdhd", 0, 0);
 
     now = ngx_time();
 
     /* creation_time */
-    p = ngx_ts_dash_write32(p, now);
+    ngx_ts_dash_write32(b, now);
 
     /* modification_time */
-    p = ngx_ts_dash_write32(p, now);
+    ngx_ts_dash_write32(b, now);
 
     /* timescale */
-    p = ngx_ts_dash_write32(p, 90000);
+    ngx_ts_dash_write32(b, 90000);
 
     /* duration */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* language: und */
-    p = ngx_ts_dash_write32(p, 0x55c40000);
+    ngx_ts_dash_write32(b, 0x55c40000);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_hdlr(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_hdlr(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "hdlr", 0, 0);
+    p = ngx_ts_dash_box_full(b, "hdlr", 0, 0);
 
     /* pre_defined */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* handler_type */
-    p = ngx_cpymem(p, rep->es->video ? "vide" : "soun", 4);
+    ngx_ts_dash_cpymem(b, rep->es->video ? "vide" : "soun", 4);
 
     /* reserved */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* name */
-    p = ngx_cpymem(p, rep->es->video ? "video" : "audio", 6);
+    ngx_ts_dash_cpymem(b, rep->es->video ? "video" : "audio", 6);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_minf(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_minf(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "minf");
+    p = ngx_ts_dash_box(b, "minf");
 
     if (rep->es->video) {
-        p = ngx_ts_dash_box_vmhd(p);
+        ngx_ts_dash_box_vmhd(b);
 
     } else {
-        p = ngx_ts_dash_box_smhd(p);
+        ngx_ts_dash_box_smhd(b);
     }
 
-    p = ngx_ts_dash_box_dinf(p);
-    p = ngx_ts_dash_box_stbl(p, rep);
+    ngx_ts_dash_box_dinf(b);
+    ngx_ts_dash_box_stbl(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_vmhd(u_char *p)
+static void
+ngx_ts_dash_box_vmhd(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "vmhd", 0, 1);
+    p = ngx_ts_dash_box_full(b, "vmhd", 0, 1);
 
     /* graphicsmode, opcolor */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_smhd(u_char *p)
+static void
+ngx_ts_dash_box_smhd(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "smhd", 0, 0);
+    p = ngx_ts_dash_box_full(b, "smhd", 0, 0);
 
     /* balance, reserved */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_dinf(u_char *p)
+static void
+ngx_ts_dash_box_dinf(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "dinf");
+    p = ngx_ts_dash_box(b, "dinf");
 
-    p = ngx_ts_dash_box_dref(p);
+    ngx_ts_dash_box_dref(b);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_dref(u_char *p)
+static void
+ngx_ts_dash_box_dref(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "dref", 0, 0);
+    p = ngx_ts_dash_box_full(b, "dref", 0, 0);
 
     /* entry_count */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
 
-    p = ngx_ts_dash_box_url(p);
+    ngx_ts_dash_box_url(b);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_url(u_char *p)
+static void
+ngx_ts_dash_box_url(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "url ", 0, 0x01);
+    p = ngx_ts_dash_box_full(b, "url ", 0, 0x01);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_stbl(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_stbl(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "stbl");
+    p = ngx_ts_dash_box(b, "stbl");
 
-    p = ngx_ts_dash_box_stsd(p, rep);
-    p = ngx_ts_dash_box_stts(p);
-    p = ngx_ts_dash_box_stsc(p);
-    p = ngx_ts_dash_box_stsz(p);
-    p = ngx_ts_dash_box_stco(p);
+    ngx_ts_dash_box_stsd(b, rep);
+    ngx_ts_dash_box_stts(b);
+    ngx_ts_dash_box_stsc(b);
+    ngx_ts_dash_box_stsz(b);
+    ngx_ts_dash_box_stco(b);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_stts(u_char *p)
+static void
+ngx_ts_dash_box_stts(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "stts", 0, 0);
+    p = ngx_ts_dash_box_full(b, "stts", 0, 0);
 
     /* entry_count */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_stsc(u_char *p)
+static void
+ngx_ts_dash_box_stsc(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "stsc", 0, 0);
+    p = ngx_ts_dash_box_full(b, "stsc", 0, 0);
 
     /* entry_count */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_stsz(u_char *p)
+static void
+ngx_ts_dash_box_stsz(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "stsz", 0, 0);
+    p = ngx_ts_dash_box_full(b, "stsz", 0, 0);
 
     /* sample_size */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* sample_count */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_stco(u_char *p)
+static void
+ngx_ts_dash_box_stco(ngx_buf_t *b)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "stco", 0, 0);
+    p = ngx_ts_dash_box_full(b, "stco", 0, 0);
 
     /* entry_count */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_stsd(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_stsd(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "stsd", 0, 0);
+    p = ngx_ts_dash_box_full(b, "stsd", 0, 0);
 
     /* entry_count */
-    p = ngx_ts_dash_write32(p, 1);
+    ngx_ts_dash_write32(b, 1);
     
     if (rep->es->video) {
-        p = ngx_ts_dash_box_video(p, rep);
+        ngx_ts_dash_box_video(b, rep);
 
     } else {
-        p = ngx_ts_dash_box_audio(p, rep);
+        ngx_ts_dash_box_audio(b, rep);
     }
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_video(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_video(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
-
+    u_char      *p;
     ngx_uint_t   avc1;
 
     avc1 = (rep->es->type == NGX_TS_VIDEO_AVC);
 
-    p = ngx_ts_dash_box(p, avc1 ? "avc1" : "mp4v");
+    p = ngx_ts_dash_box(b, avc1 ? "avc1" : "mp4v");
 
     /* reserved */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write16(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write16(b, 0);
 
     /* data_reference_index */
-    p = ngx_ts_dash_write16(p, 1);
+    ngx_ts_dash_write16(b, 1);
 
     /* pre_defined, reserved */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
 
-    p = ngx_ts_dash_write16(p, rep->avc ? rep->avc->width
-                                        : NGX_TS_DASH_DEFAULT_WIDTH);
+    ngx_ts_dash_write16(b, rep->avc ? rep->avc->width
+                                    : NGX_TS_DASH_DEFAULT_WIDTH);
 
-    p = ngx_ts_dash_write16(p, rep->avc ? rep->avc->height
-                                        : NGX_TS_DASH_DEFAULT_HEIGHT);
+    ngx_ts_dash_write16(b, rep->avc ? rep->avc->height
+                                    : NGX_TS_DASH_DEFAULT_HEIGHT);
 
     /* horizresolution */
-    p = ngx_ts_dash_write32(p, 0x00480000);
+    ngx_ts_dash_write32(b, 0x00480000);
 
     /* vertresolution */
-    p = ngx_ts_dash_write32(p, 0x00480000);
+    ngx_ts_dash_write32(b, 0x00480000);
 
     /* reserved */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* frame_count */
-    p = ngx_ts_dash_write16(p, 1);
+    ngx_ts_dash_write16(b, 1);
 
     /* compressorname */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* depth */
-    p = ngx_ts_dash_write16(p, 0x0018);
+    ngx_ts_dash_write16(b, 0x0018);
 
     /* pre_defined */
-    p = ngx_ts_dash_write16(p, 0xffff);
+    ngx_ts_dash_write16(b, 0xffff);
 
     if (avc1) {
-        p = ngx_ts_dash_box_avcc(p, rep);
+        ngx_ts_dash_box_avcc(b, rep);
 
     } else {
-        p = ngx_ts_dash_box_esds(p, rep);
+        ngx_ts_dash_box_esds(b, rep);
     }
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_audio(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_audio(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box(p, "mp4a");
+    p = ngx_ts_dash_box(b, "mp4a");
 
     /* reserved */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write16(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write16(b, 0);
 
     /* data_reference_index */
-    p = ngx_ts_dash_write16(p, 1);
+    ngx_ts_dash_write16(b, 1);
 
     /* reserved */
-    p = ngx_ts_dash_write32(p, 0);
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* channel_count */
-    p = ngx_ts_dash_write16(p, 2);
+    ngx_ts_dash_write16(b, 2);
 
     /* samplesize */
-    p = ngx_ts_dash_write16(p, 16);
+    ngx_ts_dash_write16(b, 16);
 
     /* pre_defined, reserved */
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_write32(b, 0);
 
     /* XXX samplerate */
-    p = ngx_ts_dash_write32(p, 90000);
+    ngx_ts_dash_write32(b, 90000);
 
-    p = ngx_ts_dash_box_esds(p, rep);
+    ngx_ts_dash_box_esds(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_avcc(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_avcc(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
-
-    u_char  *sps, *pps;
+    u_char  *p, *sps, *pps;
     size_t   sps_len, pps_len;
 
     sps_len = rep->sps_len;
     pps_len = rep->pps_len;
 
     if (sps_len < 4 || pps_len == 0) {
-        return p;
+        return;
     }
 
     sps = rep->sps;
     pps = rep->pps;
 
-    p = ngx_ts_dash_box(p, "avcC");
+    p = ngx_ts_dash_box(b, "avcC");
 
     /*
      * ISO/IEC 14496-15:2004(E)
@@ -915,57 +887,51 @@ ngx_ts_dash_box_avcc(u_char *p, ngx_ts_dash_rep_t *rep)
      */
 
     /* configurationVersion */
-    *p++ = 1;
+    ngx_ts_dash_write8(b, 1);
 
-    /* AVCProfileIndication */
-    *p++ = sps[1];
-
-    /* profile_compatibility */
-    *p++ = sps[2];
-
-    /* AVCLevelIndication */
-    *p++ = sps[3];
+    /* AVCProfileIndication, profile_compatibility, AVCLevelIndication */
+    ngx_ts_dash_cpymem(b, &sps[1], 3);
 
     /* lengthSizeMinusOne (lengthSize = 4) */
-    *p++ = 0xff;
+    ngx_ts_dash_write8(b, 0xff);
 
     /* numOfSequenceParameterSets = 1 */
-    *p++ = 0xe1;
+    ngx_ts_dash_write8(b, 0xe1);
 
     /* sequenceParameterSetLength */
-    p = ngx_ts_dash_write16(p, sps_len);
+    ngx_ts_dash_write16(b, sps_len);
 
     /* sequenceParameterSetNALUnit */
-    p = ngx_cpymem(p, sps, sps_len);
+    ngx_ts_dash_cpymem(b, sps, sps_len);
 
     /* numOfPictureParameterSets */
-    *p++ = 1;
+    ngx_ts_dash_write8(b, 1);
 
     /* pictureParameterSetLength */
-    p = ngx_ts_dash_write16(p, pps_len);
+    ngx_ts_dash_write16(b, pps_len);
 
     /* pictureParameterSetNALUnit */
-    p = ngx_cpymem(p, pps, pps_len);
+    ngx_ts_dash_cpymem(b, pps, pps_len);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_box_esds(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_box_esds(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_box_full(p, "esds", 0, 0);
+    p = ngx_ts_dash_box_full(b, "esds", 0, 0);
 
-    p = ngx_ts_dash_desc_es(p, rep);
+    ngx_ts_dash_desc_es(b, rep);
 
-    return ngx_ts_dash_box_update(p, ps);
+    ngx_ts_dash_box_update(b, p);
 }
 
 
 static u_char *
-ngx_ts_dash_box(u_char *p, const char type[4])
+ngx_ts_dash_box(ngx_buf_t *b, const char type[4])
 {
     /*
      * class Box
@@ -973,18 +939,22 @@ ngx_ts_dash_box(u_char *p, const char type[4])
      * 4.2 Object Structure, p. 4
      */
 
+    u_char  *p;
+
+    p = b->last;
+
     /* size */
-    p += 4;
+    ngx_ts_dash_write32(b, 0);
 
     /* type */
-    p = ngx_cpymem(p, type, 4);
+    ngx_ts_dash_cpymem(b, type, 4);
 
     return p;
 }
 
 
 static u_char *
-ngx_ts_dash_box_full(u_char *p, const char type[4], u_char version,
+ngx_ts_dash_box_full(ngx_buf_t *b, const char type[4], u_char version,
     uint32_t flags)
 {
     /*
@@ -993,96 +963,103 @@ ngx_ts_dash_box_full(u_char *p, const char type[4], u_char version,
      * 4.2 Object Structure, p. 4
      */
 
-    p = ngx_ts_dash_box(p, type);
+    u_char  *p;
+
+    p = ngx_ts_dash_box(b, type);
 
     /* version */
-    *p++ = version;
+    ngx_ts_dash_write8(b, version);
 
     /* flags */
-    *p++ = (u_char) (flags >> 16);
-    *p++ = (u_char) (flags >> 8);
-    *p++ = (u_char) flags;
+    ngx_ts_dash_write24(b, flags);
 
     return p;
 }
 
 
-static u_char *
-ngx_ts_dash_box_update(u_char *p, u_char *ps)
+static void
+ngx_ts_dash_box_update(ngx_buf_t *b, u_char *p)
 {
-    ngx_ts_dash_write32(ps, p - ps);
+    uint32_t  size;
 
-    return p;
+    if (p + 4 > b->end) {
+        return;
+    }
+
+    size = b->last - p;
+
+    *p++ = (u_char) (size >> 24);
+    *p++ = (u_char) (size >> 16);
+    *p++ = (u_char) (size >> 8);
+    *p++ = (u_char) size;
 }
 
 
-static u_char *
-ngx_ts_dash_desc_es(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_desc_es(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
     /*
      * ISO/IEC 14496-1:2001(E)
      * 8.6.5 ES_Descriptor, p. 28
      */
 
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_desc(p, 0x03);
+    p = ngx_ts_dash_desc(b, 0x03);
 
     /* ES_ID */
-    p = ngx_ts_dash_write16(p, 1);
+    ngx_ts_dash_write16(b, 1);
 
     /* flags */
-    *p++ = 0;
+    ngx_ts_dash_write8(b, 0);
 
-    p = ngx_ts_dash_desc_dec_conf(p, rep);
-    p = ngx_ts_dash_desc_sl_conf(p);
+    ngx_ts_dash_desc_dec_conf(b, rep);
+    ngx_ts_dash_desc_sl_conf(b);
 
-    return ngx_ts_dash_desc_update(p, ps);
+    ngx_ts_dash_desc_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_desc_dec_conf(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_desc_dec_conf(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
     /*
      * ISO/IEC 14496-1:2001(E)
      * 8.6.6 DecoderConfigDescriptor, p. 30
      */
 
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_desc(p, 0x04);
+    p = ngx_ts_dash_desc(b, 0x04);
 
     /* objectTypeIndication */
-    *p++ = ngx_ts_dash_get_oti(rep->es->type);
+    ngx_ts_dash_write8(b, ngx_ts_dash_get_oti(rep->es->type));
 
     /* streamType, upStream, reserved */
-    *p++ = (rep->es->video ? 0x04 : 0x05) << 2;
+    ngx_ts_dash_write8(b, (rep->es->video ? 0x04 : 0x05) << 2);
 
     /* bufferSizeDB */
-    *p++ = 0;
-    *p++ = 0;
-    *p++ = 0;
+    ngx_ts_dash_write24(b, 0);
 
     /* maxBitrate */
-    p = ngx_ts_dash_write32(p, rep->bandwidth * 2);
+    ngx_ts_dash_write32(b, rep->bandwidth * 2);
 
     /* avgBitrate */
-    p = ngx_ts_dash_write32(p, rep->bandwidth);
+    ngx_ts_dash_write32(b, rep->bandwidth);
 
-    p = ngx_ts_dash_desc_dec_spec(p, rep);
+    ngx_ts_dash_desc_dec_spec(b, rep);
 
-    return ngx_ts_dash_desc_update(p, ps);
+    ngx_ts_dash_desc_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_desc_dec_spec(u_char *p, ngx_ts_dash_rep_t *rep)
+static void
+ngx_ts_dash_desc_dec_spec(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
 {
-    u_char  *ps = p;
+    u_char  *p;
 
     if (rep->aac == NULL) {
-        return p;
+        return;
     }
 
     /* TODO
@@ -1090,113 +1067,135 @@ ngx_ts_dash_desc_dec_spec(u_char *p, ngx_ts_dash_rep_t *rep)
      * https://wiki.multimedia.cx/index.php/MPEG-4_Audio#Audio_Specific_Config
      */
 
-    p = ngx_ts_dash_desc(p, 0x05);
+    p = ngx_ts_dash_desc(b, 0x05);
 
-    *p++ = (rep->aac->profile << 3) + (rep->aac->freq_index >> 1);
-    *p++ = (rep->aac->freq_index << 7) + (rep->aac->chan << 3);
+    ngx_ts_dash_write8(b,
+                       (rep->aac->profile << 3) + (rep->aac->freq_index >> 1));
+    ngx_ts_dash_write8(b, (rep->aac->freq_index << 7) + (rep->aac->chan << 3));
 
-    return ngx_ts_dash_desc_update(p, ps);
+    ngx_ts_dash_desc_update(b, p);
 }
 
 
-static u_char *
-ngx_ts_dash_desc_sl_conf(u_char *p)
+static void
+ngx_ts_dash_desc_sl_conf(ngx_buf_t *b)
 {
     /*
      * ISO/IEC 14496-1:2001(E)
      * 10.2.3 SL Packet Header Configuration, p. 227
      */
 
-    u_char  *ps = p;
+    u_char  *p;
 
-    p = ngx_ts_dash_desc(p, 0x06);
+    p = ngx_ts_dash_desc(b, 0x06);
 
     /* predefined */
-    *p++ = 0x02;
+    ngx_ts_dash_write8(b, 0x02);
 
-    return ngx_ts_dash_desc_update(p, ps);
+    ngx_ts_dash_desc_update(b, p);
 }
 
 
 static u_char *
-ngx_ts_dash_desc(u_char *p, u_char tag)
+ngx_ts_dash_desc(ngx_buf_t *b, u_char tag)
 {
-    *p++ = tag;
+    /*
+     * ISO/IEC 14496-1:2001(E)
+     * 8.2.2 BaseDescriptor, p. 16
+     */
+
+    u_char  *p;
+
+    ngx_ts_dash_write8(b, tag);
+
+    p = b->last;
 
     /* size */
-    p += 4;
+    ngx_ts_dash_write32(b, 0);
 
     return p;
 }
 
 
-static u_char *
-ngx_ts_dash_desc_update(u_char *p, u_char *ps)
+static void
+ngx_ts_dash_desc_update(ngx_buf_t *b, u_char *p)
 {
     uint32_t  size;
 
-    ps++;
+    if (p + 4 > b->end) {
+        return;
+    }
 
-    size = p - ps - 4;
+    size = b->last - p - 4;
 
-    *ps++ = (size >> 21) | 0x80;
-    *ps++ = (size >> 14) | 0x80;
-    *ps++ = (size >> 7) | 0x80;
-    *ps++ = size & 0x7f;
-
-    return p;
+    *p++ = (size >> 21) | 0x80;
+    *p++ = (size >> 14) | 0x80;
+    *p++ = (size >> 7) | 0x80;
+    *p++ = size & 0x7f;
 }
 
 
-static u_char *
-ngx_ts_dash_write64(u_char *p, uint64_t v)
+static void
+ngx_ts_dash_cpymem(ngx_buf_t *b, const void *data, size_t size)
 {
-    *p++ = (u_char) (v >> 56);
-    *p++ = (u_char) (v >> 48);
-    *p++ = (u_char) (v >> 40);
-    *p++ = (u_char) (v >> 32);
-    *p++ = (u_char) (v >> 24);
-    *p++ = (u_char) (v >> 16);
-    *p++ = (u_char) (v >> 8);
-    *p++ = (u_char) v;
+    size_t  n;
 
-    return p;
+    n = ngx_min((size_t) (b->end - b->last), size);
+
+    b->last = ngx_cpymem(b->last, data, n);
 }
 
 
-static u_char *
-ngx_ts_dash_write32(u_char *p, uint32_t v)
+static void
+ngx_ts_dash_write64(ngx_buf_t *b, uint64_t v)
 {
-    *p++ = (u_char) (v >> 24);
-    *p++ = (u_char) (v >> 16);
-    *p++ = (u_char) (v >> 8);
-    *p++ = (u_char) v;
+    ngx_int_t  n;
 
-    return p;
+    for (n = 56; n >= 0 && b->last < b->end; n -= 8) {
+        *b->last++ = (u_char) (v >> n);
+    }
 }
 
 
-static u_char *
-ngx_ts_dash_write16(u_char *p, uint16_t v)
+static void
+ngx_ts_dash_write32(ngx_buf_t *b, uint32_t v)
 {
-    *p++ = (u_char) (v >> 8);
-    *p++ = (u_char) v;
+    ngx_int_t  n;
 
-    return p;
+    for (n = 24; n >= 0 && b->last < b->end; n -= 8) {
+        *b->last++ = (u_char) (v >> n);
+    }
 }
 
 
-static uint32_t
-ngx_ts_dash_read32(u_char *p)
+static void
+ngx_ts_dash_write24(ngx_buf_t *b, uint32_t v)
 {
-    uint32_t  v;
+    ngx_int_t  n;
 
-    v = *p++;
-    v = (v << 8) + *p++;
-    v = (v << 8) + *p++;
-    v = (v << 8) + *p;
+    for (n = 16; n >= 0 && b->last < b->end; n -= 8) {
+        *b->last++ = (u_char) (v >> n);
+    }
+}
 
-    return v;
+
+static void
+ngx_ts_dash_write16(ngx_buf_t *b, uint16_t v)
+{
+    ngx_int_t  n;
+
+    for (n = 8; n >= 0 && b->last < b->end; n -= 8) {
+        *b->last++ = (u_char) (v >> n);
+    }
+}
+
+
+static void
+ngx_ts_dash_write8(ngx_buf_t *b, u_char v)
+{
+    if (b->last < b->end) {
+        *b->last++ = v;
+    }
 }
 
 
@@ -1211,8 +1210,6 @@ ngx_ts_dash_start_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     rep->nmeta = 0;
     rep->ndata = 0;
 
-    /* buffer is big enough to fit initial metadata */
-
     rep->meta = ngx_ts_dash_get_buffer(dash);
     if (rep->meta == NULL) {
         return NGX_ERROR;
@@ -1222,7 +1219,13 @@ ngx_ts_dash_start_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     b = rep->meta->buf;
 
-    b->last = ngx_ts_dash_write_segment_meta(b->last, rep);
+    ngx_ts_dash_box_styp(b);
+    ngx_ts_dash_box_sidx(b, rep);
+    ngx_ts_dash_box_moof(b, rep);
+
+    if (b->last == b->end) {
+        return NGX_ERROR;
+    }
 
     rep->data = ngx_ts_dash_get_buffer(dash);
     if (rep->data == NULL) {
@@ -1233,7 +1236,11 @@ ngx_ts_dash_start_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 
     b = rep->data->buf;
 
-    b->last = ngx_ts_dash_write_segment_data(b->last, rep);
+    ngx_ts_dash_box_mdat(b, rep);
+
+    if (b->last == b->end) {
+        return NGX_ERROR;
+    }
 
     return NGX_OK;
 }
@@ -1242,37 +1249,40 @@ ngx_ts_dash_start_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 ngx_chain_t *
 ngx_ts_dash_end_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
 {
+    int32_t              d;
     uint32_t             traf, trun, moof, mdat;
     ngx_chain_t         *out;
     ngx_ts_dash_subs_t  *subs;
 
     subs = &rep->subs;
 
-    ngx_ts_dash_write64(subs->pts, rep->seg_pts);
-    ngx_ts_dash_write64(subs->dts, rep->seg_dts);
+    ngx_ts_dash_put64(subs->pts, rep->seg_pts);
+    ngx_ts_dash_put64(subs->dts, rep->seg_dts);
 
-    ngx_ts_dash_write32(subs->seq, rep->seg);
-    ngx_ts_dash_write32(subs->nsamples, rep->nsamples);
-    ngx_ts_dash_write32(subs->duration, rep->es->dts - rep->seg_dts);
+    ngx_ts_dash_put32(subs->seq, rep->seg);
+    ngx_ts_dash_put32(subs->nsamples, rep->nsamples);
+    ngx_ts_dash_put32(subs->duration, rep->es->dts - rep->seg_dts);
 
-    if (subs->sample_duration) {
-        ngx_ts_dash_write32(subs->sample_duration, rep->es->dts - rep->dts);
+    d = rep->es->dts - rep->dts;
+
+    if (subs->sample_duration && d > 0) {
+        ngx_ts_dash_put32(subs->sample_duration, d);
     }
 
-    traf = ngx_ts_dash_read32(subs->traf) + rep->nmeta;
-    ngx_ts_dash_write32(subs->traf, traf);
+    traf = ngx_ts_dash_get32(subs->traf) + rep->nmeta;
+    ngx_ts_dash_put32(subs->traf, traf);
 
-    trun = ngx_ts_dash_read32(subs->trun) + rep->nmeta;
-    ngx_ts_dash_write32(subs->trun, trun);
+    trun = ngx_ts_dash_get32(subs->trun) + rep->nmeta;
+    ngx_ts_dash_put32(subs->trun, trun);
 
-    moof = ngx_ts_dash_read32(subs->moof) + rep->nmeta;
-    ngx_ts_dash_write32(subs->moof, moof);
+    moof = ngx_ts_dash_get32(subs->moof) + rep->nmeta;
+    ngx_ts_dash_put32(subs->moof, moof);
 
-    mdat = ngx_ts_dash_read32(subs->mdat) + rep->ndata;
-    ngx_ts_dash_write32(subs->mdat, mdat);
+    mdat = ngx_ts_dash_get32(subs->mdat) + rep->ndata;
+    ngx_ts_dash_put32(subs->mdat, mdat);
 
-    ngx_ts_dash_write32(subs->moof_mdat, moof + mdat);
-    ngx_ts_dash_write32(subs->moof_data, moof + 8);
+    ngx_ts_dash_put32(subs->moof_mdat, moof + mdat);
+    ngx_ts_dash_put32(subs->moof_data, moof + 8);
 
     out = rep->meta;
     rep->last_meta->next = rep->data;
@@ -1283,6 +1293,51 @@ ngx_ts_dash_end_segment(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep)
     rep->last_data = NULL;
 
     return out;
+}
+
+
+static void
+ngx_ts_dash_set_sub(ngx_buf_t *b, u_char **p)
+{
+    *p = b->last;
+}
+
+
+static uint32_t
+ngx_ts_dash_get32(u_char *p)
+{
+    uint32_t  v;
+
+    v = *p++;
+    v = (v << 8) + *p++;
+    v = (v << 8) + *p++;
+    v = (v << 8) + *p;
+
+    return v;
+}
+
+
+static void
+ngx_ts_dash_put32(u_char *p, uint32_t v)
+{
+    *p++ = (u_char) (v >> 24);
+    *p++ = (u_char) (v >> 16);
+    *p++ = (u_char) (v >> 8);
+    *p++ = (u_char) v;
+}
+
+
+static void
+ngx_ts_dash_put64(u_char *p, uint64_t v)
+{
+    *p++ = (u_char) (v >> 56);
+    *p++ = (u_char) (v >> 48);
+    *p++ = (u_char) (v >> 40);
+    *p++ = (u_char) (v >> 32);
+    *p++ = (u_char) (v >> 24);
+    *p++ = (u_char) (v >> 16);
+    *p++ = (u_char) (v >> 8);
+    *p++ = (u_char) v;
 }
 
 
@@ -1304,7 +1359,6 @@ ngx_ts_dash_append_meta(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
     size_t size, uint64_t dts)
 {
     size_t        n;
-    u_char       *p;
     ngx_buf_t    *b;
     ngx_chain_t  *cl;
     ngx_ts_es_t  *es;
@@ -1330,20 +1384,18 @@ ngx_ts_dash_append_meta(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
         b = cl->buf;
     }
 
-    p = b->last;
-    b->last += n;
     rep->nmeta += n;
 
     /* sample_duration */
     if (rep->subs.sample_duration) {
-        ngx_ts_dash_write32(rep->subs.sample_duration, dts - rep->dts);
+        ngx_ts_dash_put32(rep->subs.sample_duration, dts - rep->dts);
     }
 
-    rep->subs.sample_duration = p;
-    p = ngx_ts_dash_write32(p, 0);
+    ngx_ts_dash_set_sub(b, &rep->subs.sample_duration);
+    ngx_ts_dash_write32(b, 0);
 
     /* sample_size */
-    p = ngx_ts_dash_write32(p, size);
+    ngx_ts_dash_write32(b, size);
 
     if (es->video) {
 
@@ -1353,10 +1405,10 @@ ngx_ts_dash_append_meta(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
          * sample_is_difference_sample for non-key sample
          */
 
-        p = ngx_ts_dash_write32(p, es->rand ? 0x00000000 : 0x00010000);
+        ngx_ts_dash_write32(b, es->rand ? 0x00000000 : 0x00010000);
 
         /* sample_composition_time_offset */
-        ngx_ts_dash_write32(p, es->pts - es->dts);
+        ngx_ts_dash_write32(b, es->pts - es->dts);
     }
 
     rep->dts = dts;

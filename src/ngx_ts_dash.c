@@ -65,6 +65,7 @@ ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     dash->conf = conf;
     dash->ts = ts;
     dash->playlist_len = 128;
+    dash->init_seg_len = 256;
 
     dash->path.len = conf->path->name.len + 1 + name->len;
     dash->path.data = ngx_pnalloc(ts->pool, dash->path.len + 1);
@@ -614,7 +615,7 @@ ngx_ts_dash_copy_aac(ngx_ts_dash_t *dash, ngx_ts_dash_rep_t *rep,
             }
         }
 
-        len = adts[3] & 0x02;
+        len = adts[3] & 0x03;
         len = (len << 8) + adts[4];
         len = (len << 3) + (adts[5] >> 5);
 
@@ -1059,8 +1060,8 @@ ngx_ts_dash_format_codec(u_char *p, ngx_ts_dash_rep_t *rep)
 static ngx_int_t
 ngx_ts_dash_update_init_segments(ngx_ts_dash_t *dash)
 {
-    size_t              len;
     u_char             *data;
+    ngx_buf_t           out;
     ngx_uint_t          i, j;
     ngx_ts_stream_t    *ts;
     ngx_ts_dash_set_t  *set;
@@ -1078,19 +1079,36 @@ ngx_ts_dash_update_init_segments(ngx_ts_dash_t *dash)
                 continue;
             }
 
-            ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
-                           "ts dash write init segment \"%s\"", rep->init_path);
+            for ( ;; ) {
+                ngx_log_debug2(NGX_LOG_DEBUG_CORE, ts->log, 0,
+                               "ts dash write init segment \"%s\", buf:%uz",
+                               rep->init_path, dash->init_seg_len);
 
-            /* XXX ensure buf size */
-            data = ngx_alloc(1024 + rep->sps_len + rep->pps_len, ts->log);
-            if (data == NULL) {
-                return NGX_ERROR;
+                ngx_memzero(&out, sizeof(ngx_buf_t));
+
+                data = ngx_alloc(dash->init_seg_len, ts->log);
+                if (data == NULL) {
+                    return NGX_ERROR;
+                }
+
+                out.start = data;
+                out.pos = data;
+                out.last = data;
+                out.end = data + dash->init_seg_len;
+
+                ngx_ts_dash_write_init_segment(&out, rep);
+
+                if (out.last < out.end) {
+                    break;
+                }
+
+                ngx_free(data);
+
+                dash->init_seg_len *= 2;
             }
 
-            len = ngx_ts_dash_write_init_segment(data, rep) - data;
-
             if (ngx_ts_dash_write_file(rep->init_tmp_path, rep->init_path,
-                                       data, len, ts->log)
+                                       out.pos, out.last - out.pos, ts->log)
                 != NGX_OK)
             {
                 ngx_free(data);
@@ -1392,7 +1410,7 @@ ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     dash->min_seg = min_seg;
     dash->max_seg = max_seg;
-    dash->analyze = analyze ? analyze : min_seg * 2;
+    dash->analyze = analyze ? analyze : min_seg;
     dash->max_size = max_size;
     dash->nsegs = nsegs;
 

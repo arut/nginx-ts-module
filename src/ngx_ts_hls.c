@@ -980,7 +980,7 @@ ngx_ts_hls_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     hls->min_seg = min_seg;
     hls->max_seg = max_seg;
-    hls->analyze = analyze ? analyze : min_seg * 2;
+    hls->analyze = analyze ? analyze : min_seg;
     hls->max_size = max_size;
     hls->nsegs = nsegs;
 

@@ -102,6 +102,7 @@ typedef struct {
     u_char                 *mpd_tmp_path;
     ngx_str_t               path;
     size_t                  playlist_len;
+    size_t                  init_seg_len;
     time_t                  availability_start;
 
     ngx_chain_t            *free;
@@ -116,7 +117,7 @@ ngx_ts_dash_t *ngx_ts_dash_create(ngx_ts_dash_conf_t *conf, ngx_ts_stream_t *ts,
     ngx_str_t *name);
 char *ngx_ts_dash_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
-u_char *ngx_ts_dash_write_init_segment(u_char *p, ngx_ts_dash_rep_t *rep);
+void ngx_ts_dash_write_init_segment(ngx_buf_t *b, ngx_ts_dash_rep_t *rep);
 
 ngx_int_t ngx_ts_dash_start_segment(ngx_ts_dash_t *dash,
     ngx_ts_dash_rep_t *rep);
