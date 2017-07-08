@@ -1258,7 +1258,7 @@ ngx_ts_packetize(ngx_ts_stream_t *ts, ngx_ts_header_t *h, ngx_chain_t *in)
 
         } else {
             ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0,
-                           "ts alloc buffer:%uz", NGX_TS_PACKET_SIZE);
+                           "ts alloc buffer:%d", NGX_TS_PACKET_SIZE);
 
             b = ngx_create_temp_buf(ts->pool, NGX_TS_PACKET_SIZE);
             if (b == NULL) {

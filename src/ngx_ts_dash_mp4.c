@@ -1468,7 +1468,7 @@ ngx_ts_dash_get_buffer(ngx_ts_dash_t *dash)
         }
 
         ngx_log_debug1(NGX_LOG_DEBUG_CORE, dash->ts->log, 0,
-                       "ts dash alloc buffer:%uz", NGX_TS_DASH_BUFFER_SIZE);
+                       "ts dash alloc buffer:%d", NGX_TS_DASH_BUFFER_SIZE);
 
         b = ngx_create_temp_buf(dash->ts->pool, NGX_TS_DASH_BUFFER_SIZE);
         if (b == NULL) {
