@@ -242,17 +242,27 @@ MPEG-DASH in HTML using the dash.js_ player:
       </div>
     </body>
 
-Broadcasting a simple mp4 file:
+Broadcasting a single-bitrate mp4 file:
 
 .. code-block:: bash
 
-    $ ffmpeg -re -i ~/Movies/sintel.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/publish/sintel
+    $ ffmpeg -re -i ~/Movies/sintel.mp4 -bsf:v h264_mp4toannexb
+             -c copy -f mpegts http://127.0.0.1:8000/publish/sintel
 
-Broadcasting a multi-bitrate mp4 file:
+Broadcasting an mp4 file in multiple bitrates.
+For proper HLS generation streams should be grouped into MPEG-TS programs with
+the ``-program`` option of ``ffmpeg``.
 
 .. code-block:: bash
 
-    $ ffmpeg -re -i ~/Movies/sintel.mp4 -map 0:0 -map 0:1 -map 0:1 -c copy -bsf:v h264_mp4toannexb -program "st=0:st=1" -program "st=2" -f mpegts http://127.0.0.1:8000/publish/sintel
+    $ ffmpeg -re -i ~/Movies/sintel.mp4 -bsf:v h264_mp4toannexb
+             -map 0:0 -map 0:1 -map 0:0 -map 0:1
+             -c:v:0 copy
+             -c:a:0 copy
+             -c:v:1 libx264 -b:v:1 100k
+             -c:a:1 libfaac -ac:a:1 1 -b:a:1 32k
+             -program "st=0:st=1" -program "st=2:st=3"
+             -f mpegts http://127.0.0.1:8000/publish/sintel
 
 
 .. _HLS: https://tools.ietf.org/html/draft-pantos-http-live-streaming-23
