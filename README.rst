@@ -145,7 +145,7 @@ minimum.
   When setting an explicit value for the ``MAX`` parameter, the following
   note should be taken into account.
   If the next segment is shorter than the previous one by a factor more that
-  two, dash.js_ may end up in a busy cycle requesting the second segment over
+  two, dash.js_ can end up in a busy cycle requesting the second segment over
   and over again.
 
 The ``segments`` parameter specifies the maximum number of segments in a
