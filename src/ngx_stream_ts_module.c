@@ -25,6 +25,7 @@ typedef struct {
 
 
 static void ngx_stream_ts_handler(ngx_stream_session_t *s);
+static void ngx_stream_ts_read_handler(ngx_event_t *rev);
 static char *ngx_stream_ts(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static void *ngx_stream_ts_create_conf(ngx_conf_t *cf);
 static char *ngx_stream_ts_merge_conf(ngx_conf_t *cf, void *parent,
@@ -87,7 +88,7 @@ ngx_module_t  ngx_stream_ts_module = {
 
 
 static void
-ngx_stream_ts_handler(ngx_stream_session_t *s);
+ngx_stream_ts_handler(ngx_stream_session_t *s)
 {
     ngx_str_t                  name;
     ngx_connection_t          *c;
@@ -111,8 +112,8 @@ ngx_stream_ts_handler(ngx_stream_session_t *s);
     ctx->ts->pool = c->pool;
     ctx->ts->log = c->log;
 
-    /* XXX */
-    ngx_ste_set(&name, "foo");
+    /* TODO */
+    ngx_str_set(&name, "default");
 
     /* XXX detect streams with the same name, add shared zone */
 
@@ -132,15 +133,15 @@ ngx_stream_ts_handler(ngx_stream_session_t *s);
         }
     }
 
-    ngx_stream_set_ctx(r, ctx, ngx_stream_ts_module);
+    ngx_stream_set_ctx(s, ctx, ngx_stream_ts_module);
 
-    c->write->handler = ngx_stream_ts_read_handler;
+    c->read->handler = ngx_stream_ts_read_handler;
 
-    ngx_stream_ts_read_handler(c->write);
+    ngx_stream_ts_read_handler(c->read);
 }
 
 
-static voi
+static void
 ngx_stream_ts_read_handler(ngx_event_t *rev)
 {
     ssize_t                n;
@@ -187,7 +188,7 @@ ngx_stream_ts_read_handler(ngx_event_t *rev)
         }
     }
 
-    ngx_add_timer(rev, 5000); /* XXX */
+    ngx_add_timer(rev, 5000);
 
     if (ngx_handle_read_event(rev, 0) != NGX_OK) {
         ngx_stream_finalize_session(s, NGX_STREAM_INTERNAL_SERVER_ERROR);

@@ -1,14 +1,14 @@
-ngx_module_type=HTTP
-ngx_addon_name=ngx_http_ts_module
-ngx_module_name=ngx_http_ts_module
+ngx_addon_name=ngx_ts_module
+
+ngx_module_type=CORE
+ngx_module_name=
 ngx_module_incs=
 ngx_module_deps="$ngx_addon_dir/src/ngx_ts_stream.h \
                  $ngx_addon_dir/src/ngx_ts_hls.h \
                  $ngx_addon_dir/src/ngx_ts_dash.h \
                  $ngx_addon_dir/src/ngx_ts_avc.h \
                  $ngx_addon_dir/src/ngx_ts_aac.h"
-ngx_module_srcs="$ngx_addon_dir/src/ngx_http_ts_module.c \
-                 $ngx_addon_dir/src/ngx_ts_stream.c \
+ngx_module_srcs="$ngx_addon_dir/src/ngx_ts_stream.c \
                  $ngx_addon_dir/src/ngx_ts_hls.c \
                  $ngx_addon_dir/src/ngx_ts_dash.c \
                  $ngx_addon_dir/src/ngx_ts_dash_mp4.c \
@@ -16,3 +16,21 @@ ngx_module_srcs="$ngx_addon_dir/src/ngx_http_ts_module.c \
                  $ngx_addon_dir/src/ngx_ts_aac.c"
 
 . auto/module
+
+if [ $HTTP != NO ]; then
+    ngx_module_type=HTTP
+    ngx_module_name=ngx_http_ts_module
+    ngx_module_deps=
+    ngx_module_srcs="$ngx_addon_dir/src/ngx_http_ts_module.c"
+
+    . auto/module
+fi
+
+if [ $STREAM != NO ]; then
+    ngx_module_type=STREAM
+    ngx_module_name=ngx_stream_ts_module
+    ngx_module_deps=
+    ngx_module_srcs="$ngx_addon_dir/src/ngx_stream_ts_module.c"
+
+    . auto/module
+fi
