@@ -102,7 +102,7 @@ The ``max_size`` parameter specifies the maximum size of a segment.
 A segment is truncated once it reaches this size.
 
 The ``noclean`` parameter indicates that the old files (segments and the
-playlist) should not be automatically removed.
+playlist) should not be automatically deleted from disk.
 
 Example::
 
@@ -126,7 +126,7 @@ segment files will be created.
 The directory is created if missing.
 For every publshed stream a subdirectory with the stream name is created under
 the ``PATH`` directory.
-The MPEG-DASH menifest file created in the stream subdirectory is named
+The MPEG-DASH manifest file created in the stream subdirectory is named
 ``index.mpd``.
 A path handler is installed to watch files in the directory.
 The old files in the directory are automatically deleted once they get old
@@ -150,14 +150,14 @@ minimum.
 
 The ``segments`` parameter specifies the maximum number of segments in a
 manifest.
-As new segments are added to the menifest, the oldest segments are removed from
+As new segments are added to the manifest, the oldest segments are removed from
 it.
 
 The ``max_size`` parameter specifies the maximum size of a segment.
 A segment is truncated once it reaches this size.
 
 The ``noclean`` parameter indicates that the old files (segments and the
-manifest) should not be automatically removed.
+manifest) should not be automatically deleted from disk.
 
 Example::
 
