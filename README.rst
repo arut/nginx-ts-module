@@ -251,7 +251,7 @@ Broadcasting a single-bitrate mp4 file:
 
 Broadcasting an mp4 file in multiple bitrates.
 For proper HLS generation streams should be grouped into MPEG-TS programs with
-the ``-program`` option of ``ffmpeg``.
+the ``-program`` option of ``ffmpeg``:
 
 .. code-block:: bash
 
