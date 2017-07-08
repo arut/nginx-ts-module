@@ -55,7 +55,7 @@ A simple way to stream MPEG-TS over HTTP is by running ``ffmpeg``:
 
 .. code-block:: bash
   
-    $ ffmpeg -re -i /path/to/foo.mp4 -c copy -bsf:v h264_mp4toannexb -f mpegts http://127.0.0.1:8000/foo
+    $ ffmpeg ... -f mpegts http://127.0.0.1:8000/foo
 
 
 By default, HTTP request body size is limited in nginx.
