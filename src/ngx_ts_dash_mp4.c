@@ -254,13 +254,13 @@ ngx_ts_dash_box_trun(ngx_buf_t *b, ngx_ts_dash_rep_t *rep)
     u_char    *p;
     uint32_t   flags;
 
-    flags = 0x000001         /* data-offset-present */
-            | 0x000100       /* sample-duration-present */
-            | 0x000200;      /* sample-size-present */
+    flags = 0x000001          /* data-offset-present */
+            | 0x000100        /* sample-duration-present */
+            | 0x000200;       /* sample-size-present */
 
     if (rep->es->video) {
-       flags |= 0x000400     /* sample-flags-present */
-                | 0x000800;  /* sample-composition-time-offset-present */
+        flags |= 0x000400     /* sample-flags-present */
+                 | 0x000800;  /* sample-composition-time-offset-present */
     }
 
     ngx_ts_dash_set_sub(b, &rep->subs.trun);
