@@ -13,8 +13,8 @@
 typedef struct {
     u_char      *pos;
     u_char      *last;
-    unsigned     shift:8;
-    unsigned     err:1;
+    ngx_uint_t   shift;
+    ngx_uint_t   err;  /* unsigned  err:1; */
     const char  *name;
     ngx_log_t   *log;
 } ngx_ts_avc_reader_t;
