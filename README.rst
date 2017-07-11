@@ -187,28 +187,20 @@ nginx.conf::
 
             location /publish/ {
                 ts;
-                ts_hls path=/var/hls segment=10s;
-                ts_dash path=/var/dash segment=10s;
+                ts_hls path=/var/media/hls segment=10s;
+                ts_dash path=/var/media/dash segment=10s;
 
                 client_max_body_size 0;
             }
 
-            location /hls/ {
+            location /play/ {
                 types {
                     application/x-mpegURL m3u8;
-                    video/MP2T ts;
-                }
-
-                root /var;
-            }
-
-            location /dash/ {
-                types {
                     application/dash+xml mpd;
+                    video/MP2T ts;
                     video/mp4 mp4;
                 }
-
-                root /var;
+                alias /var/media/;
             }
         }
     }
@@ -218,8 +210,8 @@ HLS in HTML:
 .. code-block:: html
 
     <body>
-      <video width="640" height="480" controls autoplay>
-        <source src="http://127.0.0.1:8000/hls/sintel/index.m3u8" type="application/x-mpegURL">
+      <video width="640" height="480" controls autoplay
+             src="http://127.0.0.1:8000/play/hls/sintel/index.m3u8">
       </video>
     </body>
 
@@ -229,17 +221,11 @@ MPEG-DASH in HTML using the dash.js_ player:
 
     <script src="http://cdn.dashjs.org/latest/dash.all.min.js"></script>
 
-    <style>
-    video {
-      width: 640px;
-      height: 480px;
-    }
-    </style>
-
     <body>
-      <div>
-        <video data-dashjs-player autoplay src="http://127.0.0.1:8000/dash/sintel/index.mpd" controls></video>
-      </div>
+      <video data-dashjs-player
+             width="640" height="480" controls autoplay
+             src="http://127.0.0.1:8000/play/dash/sintel/index.mpd">
+      </video>
     </body>
 
 Broadcasting a single-bitrate mp4 file:
