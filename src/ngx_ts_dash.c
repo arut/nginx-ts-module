@@ -119,13 +119,10 @@ ngx_ts_dash_cleanup(void *data)
     ngx_ts_dash_t *dash = data;
 
     ngx_uint_t          i, j;
-    ngx_ts_stream_t    *ts;
     ngx_ts_dash_set_t  *set;
     ngx_ts_dash_rep_t  *rep;
 
-    ts = dash->ts;
-
-    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash cleanup");
+    ngx_log_debug0(NGX_LOG_DEBUG_CORE, dash->ts->log, 0, "ts dash cleanup");
 
     dash->flush = 1;
 
@@ -301,7 +298,6 @@ ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
     ngx_ts_es_t *es, ngx_chain_t *in)
 {
     ngx_uint_t          i, j;
-    ngx_ts_stream_t    *ts;
     ngx_ts_dash_set_t  *set;
     ngx_ts_dash_rep_t  *rep;
 
@@ -309,9 +305,7 @@ ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
         return NGX_OK;
     }
 
-    ts = dash->ts;
-
-    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash pes pid:%ud",
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, dash->ts->log, 0, "ts dash pes pid:%ud",
                    (unsigned) es->pid);
 
     for (i = 0; i < dash->nsets; i++) {
@@ -326,8 +320,8 @@ ngx_ts_dash_pes_handler(ngx_ts_dash_t *dash, ngx_ts_program_t *prog,
         }
     }
 
-    ngx_log_debug1(NGX_LOG_DEBUG_CORE, ts->log, 0, "ts dash skip es pid:%ud",
-                   (unsigned) es->pid);
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, dash->ts->log, 0,
+                   "ts dash skip es pid:%ud", (unsigned) es->pid);
 
     return NGX_OK;
 
