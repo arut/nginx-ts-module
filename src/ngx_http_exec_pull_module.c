@@ -79,7 +79,7 @@ static ngx_int_t ngx_http_exec_pull_init(ngx_conf_t *cf);
 static ngx_command_t  ngx_http_exec_pull_commands[] = {
 
     { ngx_string("exec_pull_zone"),
-      NGX_HTTP_MAIN_CONF|NGX_CONF_TAKE3,
+      NGX_HTTP_MAIN_CONF|NGX_CONF_1MORE,
       ngx_http_exec_pull_zone,
       0,
       0,
@@ -146,7 +146,6 @@ ngx_http_exec_pull_handler(ngx_http_request_t *r)
     ngx_http_exec_pull_loc_conf_t  *elcf;
 
     elcf = ngx_http_get_module_loc_conf(r, ngx_http_exec_pull_module);
-
     if (elcf->shm_zone == NULL) {
         return NGX_DECLINED;
     }
@@ -184,19 +183,20 @@ ngx_http_exec_pull_handler(ngx_http_request_t *r)
 
         epn = (ngx_http_exec_pull_node_t *) node;
 
-        rc = ngx_memn2cmp(exec->data, epn->data, exec->len, epn->len);
+        rc = ngx_memn2cmp(exec.data, epn->data, exec.len, epn->len);
 
         if (rc == 0) {
             epn->expire = ngx_current_msec;
             epn->node.data = 1;
 
             ngx_shmtx_unlock(&pull->shpool->mutex);
-
             return NGX_DECLINED;
         }
 
         node = (rc < 0) ? node->left : node->right;
     }
+
+    /* not found */
 
     epn = ngx_slab_calloc_locked(pull->shpool,
                                  sizeof(ngx_http_exec_pull_node_t) + exec.len);
@@ -205,8 +205,8 @@ ngx_http_exec_pull_handler(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    epn->pull = pull;
     epn->node.key = hash;
+    epn->pull = pull;
     epn->len = exec.len;
     epn->expire = ngx_current_msec + pull->timeout;
 
@@ -236,7 +236,6 @@ ngx_http_exec_pull_run(ngx_http_request_t *r, char *exec,
     ngx_pid_t                       pid;
     ngx_event_t                    *rev;
     ngx_connection_t               *ec;
-    ngx_http_exec_pull_t           *pull;
     ngx_http_exec_pull_loc_conf_t  *elcf;
 
     /*
@@ -247,10 +246,6 @@ ngx_http_exec_pull_run(ngx_http_request_t *r, char *exec,
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "exec_pull run \"%s\"", epn->data);
-
-    elcf = ngx_http_get_module_loc_conf(r, ngx_http_exec_pull_module);
-
-    pull = elcf->pull;
 
     argv = ngx_http_exec_pull_parse_cmdline(r, exec);
     if (argv == NULL) {
@@ -281,6 +276,8 @@ ngx_http_exec_pull_run(ngx_http_request_t *r, char *exec,
     }
 
     if (pid == 0) {
+        elcf = ngx_http_get_module_loc_conf(r, ngx_http_exec_pull_module);
+
         ngx_http_exec_pull_child(path, argv,
                                  elcf->log_path ? &elcf->log_path->name : NULL,
                                  elcf->log_mode, wd);
@@ -290,7 +287,7 @@ ngx_http_exec_pull_run(ngx_http_request_t *r, char *exec,
 
     if (ngx_close_file(wd) == NGX_FILE_ERROR) {
         ngx_log_error(NGX_LOG_ALERT, r->connection->log, ngx_errno,
-                      ngx_close_file_n " \"%s\" failed", fm->name);
+                      ngx_close_file_n " pipe write failed");
 
         wd = NGX_INVALID_FILE;
         goto failed;
@@ -317,7 +314,7 @@ ngx_http_exec_pull_run(ngx_http_request_t *r, char *exec,
         return NGX_ERROR;
     }
 
-    ngx_add_timer(rev, pull->timeout);
+    ngx_add_timer(rev, epn->pull->timeout);
 
     return NGX_OK;
 
@@ -345,7 +342,6 @@ static char **
 ngx_http_exec_pull_parse_cmdline(ngx_http_request_t *r, char *p)
 {
     char         **pp, *s;
-    ngx_int_t      escape;
     ngx_array_t    values;
 
     if (ngx_array_init(&values, r->pool, 16, sizeof(char *)) != NGX_OK) {
@@ -361,13 +357,13 @@ ngx_http_exec_pull_parse_cmdline(ngx_http_request_t *r, char *p)
 
         pp = ngx_array_push(&values);
         if (pp == NULL) {
-            return NGX_ERROR;
+            return NULL;
         }
 
         *pp = p;
 
         for ( /* void */ ; *p; p++) {
-            if (*p == ' ' && p[-1] != '\') {
+            if (*p == ' ' && p[-1] != '\\') {
                 break;
             }
         }
@@ -381,14 +377,14 @@ ngx_http_exec_pull_parse_cmdline(ngx_http_request_t *r, char *p)
 
     pp = ngx_array_push(&values);
     if (pp == NULL) {
-        return NGX_ERROR;
+        return NULL;
     }
 
     *pp = NULL;
 
     for (pp = (char **) values.elts; *pp; pp++) {
         for (p = *pp; *p; p++) {
-            if (*p == '\') {
+            if (*p == '\\') {
                 for (s = p; *s; s++) {
                     *s = s[1];
                 }
@@ -404,10 +400,11 @@ static void
 ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
     ngx_uint_t log_mode, ngx_fd_t wd)
 {
-    char       **p;
-    u_char      *p;
-    ngx_fd_t     null, out, err, fd, nfiles;
-    ngx_pid_t    pid;
+    char           **pp;
+    u_char          *p;
+    ngx_fd_t         null, out, err, fd, nfiles;
+    ngx_pid_t        pid;
+    struct rlimit    rlmt;
 
     null = ngx_open_file("/dev/null", NGX_FILE_RDWR, NGX_FILE_OPEN, 0);
     if (null == NGX_INVALID_FILE) {
@@ -422,12 +419,13 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
         pid = ngx_getpid();
         
         if (log_mode & NGX_HTTP_EXEC_PULL_STDOUT) {
-            p = ngx_alloc(log_path->len + 1 + NGX_INT64_LEN + sizeof(".out"));
+            p = malloc(log_path->len + 1 + NGX_INT64_LEN + sizeof(".out"));
 
             if (p) {
-                ngx_sprintf(p, "%V/%P.out%Z", &elcf->log_path->name, pid);
+                ngx_sprintf(p, "%V/%P.out%Z", log_path, pid);
 
-                fd = ngx_open_file(p, NGX_FILE_WRONLY, NGX_FILE_CREATE_OR_OPEN,
+                fd = ngx_open_file(p, NGX_FILE_WRONLY,
+                                   NGX_FILE_CREATE_OR_OPEN|NGX_FILE_TRUNCATE,
                                    NGX_FILE_DEFAULT_ACCESS);
 
                 if (fd == NGX_INVALID_FILE) {
@@ -439,12 +437,13 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
         }
 
         if (log_mode & NGX_HTTP_EXEC_PULL_STDERR) {
-            p = ngx_alloc(log_path->len + 1 + NGX_INT64_LEN + sizeof(".err"));
+            p = malloc(log_path->len + 1 + NGX_INT64_LEN + sizeof(".err"));
 
             if (p) {
-                ngx_sprintf(p, "%V/%P.err%Z", &elcf->log_path->name, pid);
+                ngx_sprintf(p, "%V/%P.err%Z", log_path, pid);
 
-                fd = ngx_open_file(p, NGX_FILE_WRONLY, NGX_FILE_CREATE_OR_OPEN,
+                fd = ngx_open_file(p, NGX_FILE_WRONLY,
+                                   NGX_FILE_CREATE_OR_OPEN|NGX_FILE_TRUNCATE,
                                    NGX_FILE_DEFAULT_ACCESS);
 
                 if (fd == NGX_INVALID_FILE) {
@@ -477,17 +476,14 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
 
     for (fd = STDERR_FILENO + 1; fd < nfiles; fd++) {
         if (fd != wd) {
-            if (ngx_close_file(fd) == NGX_FILE_ERROR) {
-                perror(ngx_close_file_n " failed()");
-                exit(1);
-            }
+            (void) ngx_close_file(fd);
         }
     }
 
     if (err != null) {
-        (void) fprintf(stderr, path);
+        (void) fprintf(stderr, "%s", path);
 
-        for (pp = argv; *pp, pp++) {
+        for (pp = argv; *pp; pp++) {
             (void) fprintf(stderr, " %s", *pp);
         }
 
@@ -544,8 +540,9 @@ ngx_http_exec_pull_event_handler(ngx_event_t *rev)
     ec = rev->data;
     epn = ec->data;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                   "exec_pull event handler");
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, rev->log, 0,
+                   "exec_pull event handler pid:%P, \"%s\"",
+                   epn->pid, epn->data);
 
     if (rev->timedout && epn->node.data) {
         /* node was accessed, reschedule timer */
@@ -580,9 +577,10 @@ ngx_http_exec_pull_create_loc_conf(ngx_conf_t *cf)
     /*
      * set by ngx_pcalloc():
      *
-     *     conf->shm_zone = NULL;
+     *     conf->log_mode = 0;
      */
 
+    conf->shm_zone = NGX_CONF_UNSET_PTR;
     conf->log_path = NGX_CONF_UNSET_PTR;
 
     return conf;
@@ -595,11 +593,12 @@ ngx_http_exec_pull_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_http_exec_pull_loc_conf_t *prev = parent;
     ngx_http_exec_pull_loc_conf_t *conf = child;
 
-    if (conf->shm_zone == NULL) {
-        conf->shm_zone = prev->shm_zone;
-    }
-
+    ngx_conf_merge_ptr_value(conf->shm_zone, prev->shm_zone, NULL);
     ngx_conf_merge_ptr_value(conf->log_path, prev->log_path, NULL);
+
+    if (conf->log_mode == 0) {
+        conf->log_mode = prev->log_mode;
+    }
 
     return NGX_CONF_OK;
 }
@@ -608,17 +607,16 @@ ngx_http_exec_pull_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 static char *
 ngx_http_exec_pull_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_http_exec_pull_loc_conf_t  *elcf = conf;
-
-    size_t                 size;
-    u_char                *p;
-    ngx_str_t             *value, name, s;
-    ngx_int_t              v;
-    ngx_uint_t             i;
-    ngx_msec_t             timeout;
-    ngx_shm_zone_t        *shm_zone;
-    ngx_pool_cleanup_t    *cln;
-    ngx_http_exec_pull_t  *pull;
+    u_char                            *p;
+    ssize_t                            size;
+    ngx_str_t                         *value, name, s;
+    ngx_int_t                          v;
+    ngx_uint_t                         i;
+    ngx_msec_t                         timeout;
+    ngx_shm_zone_t                    *shm_zone;
+    ngx_pool_cleanup_t                *cln;
+    ngx_http_exec_pull_t              *pull;
+    ngx_http_compile_complex_value_t   ccv;
 
     value = cf->args->elts;
 
@@ -709,7 +707,7 @@ ngx_http_exec_pull_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     pull->timeout = timeout;
 
     shm_zone = ngx_shared_memory_add(cf, &name, size,
-                                     ngx_http_exec_pull_module);
+                                     &ngx_http_exec_pull_module);
     if (shm_zone == NULL) {
         return NGX_CONF_ERROR;
     }
@@ -763,7 +761,6 @@ ngx_http_exec_pull_init_zone(ngx_shm_zone_t *shm_zone, void *data)
 
     if (shm_zone->shm.exists) {
         pull->sh = pull->shpool->data;
-
         return NGX_OK;
     }
 
@@ -853,13 +850,22 @@ ngx_http_exec_pull_cleanup(void *data)
 static char *
 ngx_http_exec_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_http_exec_pull_conf_t  *elcf = conf;
+    ngx_http_exec_pull_loc_conf_t  *elcf = conf;
 
     ngx_str_t       *value, s;
     ngx_uint_t       i;
     ngx_shm_zone_t  *shm_zone;
 
+    if (elcf->shm_zone != NGX_CONF_UNSET_PTR) {
+        return "is duplicate";
+    }
+
     value = cf->args->elts;
+
+    if (ngx_strcmp(value[1].data, "off") == 0) {
+        elcf->shm_zone = NULL;
+        return NGX_OK;
+    }
 
     shm_zone = NULL;
 
@@ -899,7 +905,7 @@ ngx_http_exec_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 static char *
 ngx_http_exec_pull_log_path(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_http_exec_pull_conf_t  *elcf = conf;
+    ngx_http_exec_pull_loc_conf_t  *elcf = conf;
 
     ngx_str_t   *value;
     ngx_path_t  *path;
@@ -911,7 +917,7 @@ ngx_http_exec_pull_log_path(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
-    if (ngx_strcmp(value[1], "off") == 0) {
+    if (ngx_strcmp(value[1].data, "off") == 0) {
         elcf->log_path = NULL;
         return NGX_OK;
     }
