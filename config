@@ -1,6 +1,6 @@
 ngx_module_type=HTTP
 ngx_addon_name=ngx_http_ts_module
-ngx_module_name=ngx_http_ts_module
+ngx_module_name="ngx_http_ts_module ngx_http_exec_pull_module"
 ngx_module_incs=
 ngx_module_deps="$ngx_addon_dir/src/ngx_ts_stream.h \
                  $ngx_addon_dir/src/ngx_ts_hls.h \

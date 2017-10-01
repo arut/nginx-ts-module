@@ -152,9 +152,12 @@ ngx_http_exec_pull_handler(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    if (exec.len == 0) {
+    if (exec.len <= 1) {
         return NGX_DECLINED;
     }
+
+    /* do not consider terminating null */
+    exec.len--;
 
     hash = ngx_crc32_short(exec.data, exec.len);
 
@@ -182,7 +185,7 @@ ngx_http_exec_pull_handler(ngx_http_request_t *r)
         rc = ngx_memn2cmp(exec.data, epn->data, exec.len, epn->len);
 
         if (rc == 0) {
-            epn->expire = ngx_current_msec;
+            epn->expire = ngx_current_msec + pull->timeout;
             epn->node.data = 1;
 
             ngx_shmtx_unlock(&pull->shpool->mutex);
@@ -254,7 +257,7 @@ ngx_http_exec_pull_run(ngx_http_request_t *r, char *exec,
         return NGX_ERROR;
     }
 
-    path = *argv++;
+    path = *argv;
 
     if (pipe(pfd) == -1) {
         ngx_log_error(NGX_LOG_ALERT, r->connection->log, ngx_errno,
@@ -278,6 +281,9 @@ ngx_http_exec_pull_run(ngx_http_request_t *r, char *exec,
                                  elcf->log_path ? &elcf->log_path->name : NULL,
                                  elcf->log_mode, wd);
     }
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "exec_pull started pid:%P", pid);
 
     epn->pid = pid;
 
@@ -486,7 +492,7 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
         (void) fprintf(stderr, "\n");
     }
 
-    if (execv(path, argv) == -1) {
+    if (execvp(path, argv) == -1) {
         perror("execv() failed");
         exit(1);
     }
@@ -501,7 +507,7 @@ ngx_http_exec_pull_delete(ngx_http_exec_pull_node_t *epn)
     ngx_http_exec_pull_t  *pull;
 
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                   "exec_pull delete pid:%P, \"%s\"", epn->pid, epn->data);
+                   "exec_pull delete pid:%P \"%s\"", epn->pid, epn->data);
 
     pull = epn->pull;
 
@@ -537,7 +543,7 @@ ngx_http_exec_pull_event_handler(ngx_event_t *rev)
     epn = ec->data;
 
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                   "exec_pull event handler pid:%P, \"%s\"",
+                   "exec_pull event handler pid:%P \"%s\"",
                    epn->pid, epn->data);
 
     if (rev->timedout && epn->node.data) {
@@ -545,15 +551,17 @@ ngx_http_exec_pull_event_handler(ngx_event_t *rev)
 
         timeout = epn->expire - ngx_current_msec;
 
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                       "exec_pull reschedule %M", timeout);
+        if ((ngx_msec_int_t) timeout > 0) {
+            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, rev->log, 0,
+                           "exec_pull reschedule %M", timeout);
 
-        epn->node.data = 0;
-        rev->timedout = 0;
+            epn->node.data = 0;
+            rev->timedout = 0;
 
-        ngx_add_timer(rev, timeout);
+            ngx_add_timer(rev, timeout);
 
-        return;
+            return;
+        }
     }
 
     ngx_http_exec_pull_delete(epn);
@@ -634,7 +642,7 @@ ngx_http_exec_pull_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     size = 0;
     name.len = 0;
-    timeout = 1000;
+    timeout = 30000;
 
     for (i = 2; i < cf->args->nelts; i++) {
 
