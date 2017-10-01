@@ -9,10 +9,6 @@
 #include <ngx_http.h>
 
 
-#define NGX_HTTP_EXEC_PULL_STDOUT  0x01
-#define NGX_HTTP_EXEC_PULL_STDERR  0x02
-
-
 typedef struct {
     ngx_shm_zone_t            *shm_zone;
     ngx_path_t                *log_path;
@@ -418,7 +414,7 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
     if (log_path) {
         pid = ngx_getpid();
         
-        if (log_mode & NGX_HTTP_EXEC_PULL_STDOUT) {
+        if (log_mode & STDOUT_FILENO) {
             p = malloc(log_path->len + 1 + NGX_INT64_LEN + sizeof(".out"));
 
             if (p) {
@@ -436,7 +432,7 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
             }
         }
 
-        if (log_mode & NGX_HTTP_EXEC_PULL_STDERR) {
+        if (log_mode & STDERR_FILENO) {
             p = malloc(log_path->len + 1 + NGX_INT64_LEN + sizeof(".err"));
 
             if (p) {
@@ -949,12 +945,12 @@ ngx_http_exec_pull_log_path(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     for (i = 2; i < cf->args->nelts; i++) {
 
         if (ngx_strcmp(value[i].data, "stdout") == 0) {
-            mode |= NGX_HTTP_EXEC_PULL_STDOUT;
+            mode |= STDOUT_FILENO;
             continue;
         }
 
         if (ngx_strcmp(value[i].data, "stderr") == 0) {
-            mode |= NGX_HTTP_EXEC_PULL_STDERR;
+            mode |= STDERR_FILENO;
             continue;
         }
 
@@ -964,7 +960,7 @@ ngx_http_exec_pull_log_path(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     if (mode == 0) {
-        mode = NGX_HTTP_EXEC_PULL_STDOUT|NGX_HTTP_EXEC_PULL_STDERR;
+        mode = STDOUT_FILENO|STDERR_FILENO;
     }
 
     elcf->log_path = path;
