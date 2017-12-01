@@ -54,7 +54,7 @@ static ngx_command_t  ngx_stream_ts_commands[] = {
       offsetof(ngx_stream_ts_srv_conf_t, dash),
       NULL },
 
-    ngx_null_command
+      ngx_null_command
 };
 
 
