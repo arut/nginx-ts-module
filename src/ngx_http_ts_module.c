@@ -56,7 +56,7 @@ static ngx_command_t  ngx_http_ts_commands[] = {
       offsetof(ngx_http_ts_loc_conf_t, dash),
       NULL },
 
-    ngx_null_command
+      ngx_null_command
 };
 
 

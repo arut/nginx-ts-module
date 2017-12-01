@@ -95,7 +95,7 @@ static ngx_command_t  ngx_http_exec_pull_commands[] = {
       0,
       NULL },
 
-    ngx_null_command
+      ngx_null_command
 };
 
 
@@ -419,7 +419,7 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
 
     if (log_path) {
         pid = ngx_getpid();
-        
+
         if (log_mode & STDOUT_FILENO) {
             p = malloc(log_path->len + 1 + NGX_INT64_LEN + sizeof(".out"));
 
@@ -559,7 +559,6 @@ ngx_http_exec_pull_event_handler(ngx_event_t *rev)
             rev->timedout = 0;
 
             ngx_add_timer(rev, timeout);
-
             return;
         }
     }
@@ -693,6 +692,8 @@ ngx_http_exec_pull_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             }
 
             timeout = (ngx_msec_t) v;
+
+            continue;
         }
 
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
