@@ -154,6 +154,11 @@ ngx_stream_ts_read_handler(ngx_event_t *rev)
     c = rev->data;
     s = c->data;
 
+    if (ngx_exiting || ngx_terminate) {
+        ngx_stream_finalize_request(s, NGX_STREAM_OK);
+        return;
+    }
+
     if (rev->timedout) {
         ngx_stream_finalize_session(s, NGX_STREAM_OK);
         return;
