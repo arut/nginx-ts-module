@@ -38,6 +38,7 @@ typedef struct {
 
     ngx_pid_t                  pid;
     ngx_msec_t                 expire;
+    ngx_uint_t                 done;       /* unsigned done:1; */
 
     ngx_http_exec_pull_t      *pull;       /* worker field */
     ngx_connection_t          *connection; /* worker field */
@@ -351,7 +352,7 @@ ngx_http_exec_pull_parse_cmdline(ngx_http_request_t *r, char *p)
     }
 
     for ( ;; ) {
-        for ( /* void */ ; *p == ' '; p++);
+        for (/* void */; *p == ' ' || *p == '\t' || *p == CR || *p == LF; p++);
 
         if (*p == '\0') {
             break;
@@ -364,8 +365,10 @@ ngx_http_exec_pull_parse_cmdline(ngx_http_request_t *r, char *p)
 
         *pp = p;
 
-        for ( /* void */ ; *p; p++) {
-            if (*p == ' ' && p[-1] != '\\') {
+        for (/* void */; *p; p++) {
+            if ((*p == ' ' || *p == '\t' || *p == CR || *p == LF)
+                && p[-1] != '\\')
+            {
                 break;
             }
         }
@@ -504,6 +507,7 @@ ngx_http_exec_pull_child(char *path, char **argv, ngx_str_t *log_path,
 static void
 ngx_http_exec_pull_delete(ngx_http_exec_pull_node_t *epn)
 {
+    ngx_err_t              err;
     ngx_http_exec_pull_t  *pull;
 
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
@@ -511,10 +515,14 @@ ngx_http_exec_pull_delete(ngx_http_exec_pull_node_t *epn)
 
     pull = epn->pull;
 
-    if (epn->pid) {
-        if (kill(epn->pid, SIGTERM) != -1) {
-            ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, ngx_errno,
-                          "kill(%P, SIGTERM) failed", epn->pid);
+    if (epn->pid && !epn->done) {
+        if (kill(epn->pid, SIGTERM) == -1) {
+            err = ngx_errno;
+
+            if (err != NGX_ESRCH) {
+                ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, errno,
+                              "kill(%P, SIGTERM) failed", epn->pid);
+            }
         }
     }
 
@@ -535,6 +543,9 @@ ngx_http_exec_pull_delete(ngx_http_exec_pull_node_t *epn)
 static void
 ngx_http_exec_pull_event_handler(ngx_event_t *rev)
 {
+    char                        buf[1];
+    ssize_t                     n;
+    ngx_err_t                   err;
     ngx_msec_t                  timeout;
     ngx_connection_t           *ec;
     ngx_http_exec_pull_node_t  *epn;
@@ -546,21 +557,46 @@ ngx_http_exec_pull_event_handler(ngx_event_t *rev)
                    "exec_pull event handler pid:%P \"%s\"",
                    epn->pid, epn->data);
 
-    if (rev->timedout && epn->node.data) {
-        /* node was accessed, reschedule timer */
+    if (rev->timedout) {
+        if (epn->node.data) {
+            /* node was accessed, reschedule timer */
 
-        timeout = epn->expire - ngx_current_msec;
+            timeout = epn->expire - ngx_current_msec;
 
-        if ((ngx_msec_int_t) timeout > 0) {
-            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                           "exec_pull reschedule %M", timeout);
+            if ((ngx_msec_int_t) timeout > 0) {
+                ngx_log_debug1(NGX_LOG_DEBUG_HTTP, rev->log, 0,
+                               "exec_pull reschedule %M", timeout);
 
-            epn->node.data = 0;
-            rev->timedout = 0;
+                epn->node.data = 0;
+                rev->timedout = 0;
 
-            ngx_add_timer(rev, timeout);
-            return;
+                ngx_add_timer(rev, timeout);
+                return;
+            }
         }
+
+        ngx_http_exec_pull_delete(epn);
+        return;
+    }
+
+    if (!rev->pending_eof) {
+        n = recv(ec->fd, buf, 1, MSG_PEEK);
+
+        err = ngx_socket_errno;
+
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, rev->log, n == -1 ? err : 0,
+                       "exec_pull read event n:%z", n);
+
+        if (n == -1 && err == NGX_EAGAIN) {
+            ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
+                           "exec_pull false read event");
+
+            if (ngx_handle_read_event(rev, 0) == NGX_OK) {
+                return;
+            }
+        }
+
+        epn->done = 1;
     }
 
     ngx_http_exec_pull_delete(epn);
